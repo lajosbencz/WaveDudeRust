@@ -217,7 +217,7 @@ fn the_avx_engine_steps_as_the_cpu_engine() {
 			for (edges, damping_edge) in EDGES {
 				let mut trio = Trio::new(stencil, edges, damping_edge, None);
 				assert_eq!(trio.reference.sub_steps(), trio.cpu.sub_steps());
-				assert!(trio.cpu.sub_steps() > 1, "{}: the 9-point's steps are blocked", trio.what);
+				assert!(trio.cpu.sub_steps() > 1, "{}: the steps are blocked", trio.what);
 				for step in 1..=300 {
 					trio.run(1);
 					if step % 20 == 1 || step == 300 {
@@ -373,9 +373,9 @@ fn odd_and_many_sub_steps_agree() {
 		return;
 	}
 	on_seams(|| {
-		for n in [3, 5] {
+		for (stencil, n) in STENCILS.into_iter().flat_map(|stencil| [3, 5].map(|n| (stencil, n))) {
 			for (edges, damping_edge) in EDGES {
-				let mut trio = Trio::new(Stencil::NinePoint, edges, damping_edge, Some(n));
+				let mut trio = Trio::new(stencil, edges, damping_edge, Some(n));
 				trio.what = format!("{}, {n} sub-steps", trio.what);
 				for step in 1..=60 {
 					trio.run(1);
@@ -406,9 +406,10 @@ fn short_grids_agree() {
 				let settings =
 					Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
 				let build = || SceneData::from_pixels(&pixels(100)[..(W * h * 4) as usize], W, h, &settings);
-				for n in [None, Some(3)] {
-					let what = format!("{edges:?} damping edge {damping_edge}, {h} rows, {n:?} sub-steps");
-					let mut trio = Trio::on(build, Stencil::NinePoint, n, what, &sources);
+				for (stencil, n) in STENCILS.into_iter().flat_map(|stencil| [None, Some(3)].map(|n| (stencil, n))) {
+					let what = format!("{stencil:?} {edges:?} damping edge {damping_edge}, {h} rows, {n:?} sub-steps");
+					let mut trio = Trio::on(build, stencil, n, what, &sources);
+					assert!(trio.cpu.sub_steps() > 1, "{}: the steps are blocked", trio.what);
 					trio.run(80);
 					trio.check("step 80");
 				}

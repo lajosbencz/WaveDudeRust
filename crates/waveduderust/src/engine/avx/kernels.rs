@@ -24,6 +24,24 @@
 //! Four variants: uniform or planes, with or without the stages. The last `len % 8` cells go through the reference.
 //! The fused multiply-adds round differently from the reference, so the engine agrees with the CPU engine within a
 //! tolerance (tests/avx.rs); the unit test below holds the kernel to a few ulps of the reference's.
+//!
+//! The DRP kernels ([`lap_native`], [`outer_native`]) are inline assembly in the same shape, 8 cells per iteration.
+//! They read seven rows; a plane's rows, and a blocked step's, lie one stride apart, so the kernels address them from
+//! two pointers and the stride (rows 0 to 3 from row 1, rows 4 to 6 from row 4, the stride and its negation in general
+//! registers), which leaves registers for the outer update's planes and stages; rows not equally far apart go through
+//! the reference. The registers:
+//!
+//! - ymm0: the centre `v` of the Laplacian's rows (the outer update's `w`), then the field `c`; ymm1: `L`, then the
+//!   new value; ymm2 to ymm4: the differences and sums.
+//! - ymm8 to ymm10: `-a1`, `-a2`, `-a3`, against the differences `v - tap` as in the 9-point kernel.
+//! - The inner kernel: `w = L c2`, `c2` in ymm11 on a uniform run, per cell from memory on planes.
+//! - The outer kernel: on a uniform run `c2 / 12`, `(1 + d) / 2` and `d` in ymm11 to ymm13, taken once per span;
+//!   on planes `1 / 12` and 0.5 in ymm11 and ymm12. `next = c + ((c - next) d + (L k + w) h)`, the bracket in one
+//!   multiply-add; on planes `(L c2) / 12 + w` and `h = d 0.5 + 0.5`. The stages as the 9-point kernel's, ymm14 and
+//!   ymm15.
+//!
+//! Per block: `L = -a1 (-near) + -a2 (-mid) + -a3 (-far)` (one multiply, two multiply-adds), each ring's sum in the
+//! reference's order. The last `len % 8` cells go through the reference.
 
 use std::arch::asm;
 use std::arch::x86_64::_mm256_set1_ps;
@@ -34,9 +52,9 @@ use super::super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, centred};
 /// The 9-point leapfrog row kernel ([`nine_row`]).
 pub(super) type NineRow = fn([&[f32]; 3], RowMedium<'_>, &mut [f32], Option<Intensity<'_>>);
 /// The modified equation's inner row kernel ([`lap_row`]).
-pub(super) type LapRow = fn([&[f32]; 7], &[f32; 4], &[f32], &mut [f32]);
+pub(super) type LapRow = fn([&[f32]; 7], &[f32; 4], RowMedium<'_>, &mut [f32]);
 /// The modified equation's outer row kernel ([`outer_row`]).
-pub(super) type OuterRow = fn(&[f32], [&[f32]; 7], &[f32; 4], &[f32], &[f32], &mut [f32], Option<Intensity<'_>>);
+pub(super) type OuterRow = fn(&[f32], [&[f32]; 7], &[f32; 4], RowMedium<'_>, &mut [f32], Option<Intensity<'_>>);
 
 /// The row kernels an engine runs, picked once when it is built.
 #[derive(Clone, Copy)]
@@ -50,11 +68,11 @@ impl RowKernels {
 	/// The safe Rust kernels of this module: the CPU engine's values bit for bit.
 	pub(super) const REFERENCE: Self = Self { nine: nine_row, lap: lap_row, outer: outer_row };
 
-	/// The fastest kernels for this CPU: the 9-point one in assembly ([`nine_native`]), the others the reference
-	/// ones until hand-written kernels replace them. Only for a CPU with AVX2 and FMA, which it asserts.
+	/// The fastest kernels for this CPU, in assembly ([`nine_native`], [`lap_native`], [`outer_native`]). Only for a
+	/// CPU with AVX2 and FMA, which it asserts.
 	pub(super) fn native() -> Self {
 		assert!(super::available(), "the native row kernels need AVX2 and FMA");
-		Self { nine: nine_native, ..Self::REFERENCE }
+		Self { nine: nine_native, lap: lap_native, outer: outer_native }
 	}
 }
 
@@ -367,62 +385,351 @@ fn cut_rows(f: [&[f32]; 7], len: usize) -> [&[f32]; 7] {
 
 /// The modified equation's inner update of the `w.len()` cells of a span, `w = c2 L u` with the DRP Laplacian of
 /// weights `a` (a1..a3; a0 is implied). `u` holds the seven rows from 3 above to 3 below the span, each from 3 cells
-/// left of the span to 3 right of it (`len + 6` values); `c2` the span's.
-pub(super) fn lap_row(u: [&[f32]; 7], a: &[f32; 4], c2: &[f32], w: &mut [f32]) {
+/// left of the span to 3 right of it (`len + 6` values); `medium` the span's `c2` (its `d` unused).
+pub(super) fn lap_row(u: [&[f32]; 7], a: &[f32; 4], medium: RowMedium<'_>, w: &mut [f32]) {
 	isa::wide(
 		#[inline(always)]
-		|| {
-			let len = w.len();
-			let (u, c2) = (cut_rows(u, len), &c2[..len]);
+		|| lap_body(u, a, medium, w),
+	);
+}
+
+#[inline(always)]
+fn lap_body(u: [&[f32]; 7], a: &[f32; 4], medium: RowMedium<'_>, w: &mut [f32]) {
+	let len = w.len();
+	let u = cut_rows(u, len);
+	match medium {
+		RowMedium::Uniform { c2, .. } => {
+			for (x, w) in w.iter_mut().enumerate() {
+				*w = c2 * drp_at(&u, x, a);
+			}
+		}
+		RowMedium::Planes { c2, .. } => {
+			let c2 = &c2[..len];
 			for x in 0..len {
 				w[x] = c2[x] * drp_at(&u, x, a);
 			}
-		},
-	);
+		}
+	}
 }
 
 /// The modified equation's outer update of the `next.len()` cells of a span,
 /// `next = u + ((u - next) d + (w + c2 L w / 12) (1 + d) / 2)`, `next` holding the field one sub-step before on
 /// entry. `u` holds the span's field; `w` the seven rows of `c2 L u` from 3 above to 3 below the span, each from 3
-/// cells left of it to 3 right (`len + 6` values); `c2` and `d` the span's medium. Advances `stages` by the values
+/// cells left of it to 3 right (`len + 6` values); `medium` the span's `c2` and `d`. Advances `stages` by the values
 /// written, when given.
 pub(super) fn outer_row(
 	u: &[f32],
 	w: [&[f32]; 7],
 	a: &[f32; 4],
-	c2: &[f32],
-	d: &[f32],
+	medium: RowMedium<'_>,
 	next: &mut [f32],
 	stages: Option<Intensity<'_>>,
 ) {
 	isa::wide(
 		#[inline(always)]
-		|| {
-			let len = next.len();
-			let (u, w, c2, d) = (&u[..len], cut_rows(w, len), &c2[..len], &d[..len]);
-			let wc = &w[3][3..][..len];
-			let cell = |x: usize, before: f32| {
-				let lw = drp_at(&w, x, a);
-				let c = u[x];
-				c + ((c - before) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]))
-			};
-			match stages {
-				None => {
-					for (x, next) in next.iter_mut().enumerate() {
-						*next = cell(x, *next);
-					}
-				}
-				Some(Intensity { s1, s2, alpha }) => {
-					let (s1, s2, rest) = (&mut s1[..len], &mut s2[..len], 1.0 - alpha);
-					for x in 0..len {
-						let v = cell(x, next[x]);
-						next[x] = v;
-						advance(&mut s1[x], &mut s2[x], v, alpha, rest);
-					}
+		|| outer_body(u, w, a, medium, next, stages),
+	);
+}
+
+#[inline(always)]
+fn outer_body(
+	u: &[f32],
+	w: [&[f32]; 7],
+	a: &[f32; 4],
+	medium: RowMedium<'_>,
+	next: &mut [f32],
+	stages: Option<Intensity<'_>>,
+) {
+	match medium {
+		RowMedium::Uniform { c2, d } => outer_cells(u, w, a, |_| c2, |_| d, next, stages),
+		RowMedium::Planes { c2, d } => {
+			let (c2, d) = (&c2[..next.len()], &d[..next.len()]);
+			outer_cells(u, w, a, |x| c2[x], |x| d[x], next, stages);
+		}
+	}
+}
+
+/// [`outer_row`] with the medium of cell `x` of the span at `c2(x)` and `d(x)`.
+#[inline(always)]
+fn outer_cells(
+	u: &[f32],
+	w: [&[f32]; 7],
+	a: &[f32; 4],
+	c2: impl Fn(usize) -> f32,
+	d: impl Fn(usize) -> f32,
+	next: &mut [f32],
+	stages: Option<Intensity<'_>>,
+) {
+	let len = next.len();
+	let (u, w) = (&u[..len], cut_rows(w, len));
+	let wc = &w[3][3..][..len];
+	let cell = |x: usize, before: f32| {
+		let lw = drp_at(&w, x, a);
+		let (c, d) = (u[x], d(x));
+		c + ((c - before) * d + (wc[x] + c2(x) * lw * INV12) * centred(d))
+	};
+	match stages {
+		None => {
+			for (x, next) in next.iter_mut().enumerate() {
+				*next = cell(x, *next);
+			}
+		}
+		Some(Intensity { s1, s2, alpha }) => {
+			let (s1, s2, rest) = (&mut s1[..len], &mut s2[..len], 1.0 - alpha);
+			for x in 0..len {
+				let v = cell(x, next[x]);
+				next[x] = v;
+				advance(&mut s1[x], &mut s2[x], v, alpha, rest);
+			}
+		}
+	}
+}
+
+/// The DRP Laplacian of the 8 cells at the current block ([`lap_native`], [`outer_native`]): the rows from 3 above to
+/// 3 below at `[{a} + {ns}]`, `[{a}]`, `[{a} + {s}]`, `[{a} + {s}*2]`, `[{b}]`, `[{b} + {s}]`, `[{b} + {s}*2]`, each
+/// from 3 cells left of the block, `{a}` and `{b}` advanced block by block. The centre `v` into ymm0, `L` into ymm1,
+/// ymm2 to ymm4 clobbered. As in [`nine_lap`], the differences are `v - tap`, the sums of a ring the reference's
+/// negated bit for bit, and the negated weights `-a1`, `-a2`, `-a3` in ymm8 to ymm10 turn them back:
+/// `L = -a1 (-near) + -a2 (-mid) + -a3 (-far)`, one multiply and two multiply-adds.
+macro_rules! drp_lap {
+	() => {
+		concat!(
+			"vmovups ymm0, ymmword ptr [{a} + {s}*2 + 12]\n",
+			// -near = ((v - w1) + (v - e1)) + ((v - n1) + (v - s1))
+			"vsubps ymm1, ymm0, ymmword ptr [{a} + {s}*2 + 8]\n",
+			"vsubps ymm2, ymm0, ymmword ptr [{a} + {s}*2 + 16]\n",
+			"vaddps ymm1, ymm1, ymm2\n",
+			"vsubps ymm2, ymm0, ymmword ptr [{a} + {s} + 12]\n",
+			"vsubps ymm3, ymm0, ymmword ptr [{b} + 12]\n",
+			"vaddps ymm2, ymm2, ymm3\n",
+			"vaddps ymm1, ymm1, ymm2\n",
+			"vmulps ymm1, ymm1, ymm8\n",
+			// -mid = ((v - w2) + (v - e2)) + ((v - n2) + (v - s2))
+			"vsubps ymm2, ymm0, ymmword ptr [{a} + {s}*2 + 4]\n",
+			"vsubps ymm3, ymm0, ymmword ptr [{a} + {s}*2 + 20]\n",
+			"vaddps ymm2, ymm2, ymm3\n",
+			"vsubps ymm3, ymm0, ymmword ptr [{a} + 12]\n",
+			"vsubps ymm4, ymm0, ymmword ptr [{b} + {s} + 12]\n",
+			"vaddps ymm3, ymm3, ymm4\n",
+			"vaddps ymm2, ymm2, ymm3\n",
+			"vfmadd231ps ymm1, ymm2, ymm9\n",
+			// -far = ((v - w3) + (v - e3)) + ((v - n3) + (v - s3))
+			"vsubps ymm2, ymm0, ymmword ptr [{a} + {s}*2]\n",
+			"vsubps ymm3, ymm0, ymmword ptr [{a} + {s}*2 + 24]\n",
+			"vaddps ymm2, ymm2, ymm3\n",
+			"vsubps ymm3, ymm0, ymmword ptr [{a} + {ns} + 12]\n",
+			"vsubps ymm4, ymm0, ymmword ptr [{b} + {s}*2 + 12]\n",
+			"vaddps ymm3, ymm3, ymm4\n",
+			"vaddps ymm2, ymm2, ymm3\n",
+			"vfmadd231ps ymm1, ymm2, ymm10\n",
+		)
+	};
+}
+
+/// The update of the 8 cells at byte `{i}` of `{next}` in a uniform run, from [`drp_lap`]'s `w` (ymm0) and `L w`
+/// (ymm1): `next = c + ((c - next) d + (L w k + w) h)`, `c` from `{u}`, `k = c2 / 12` in ymm11, `h = (1 + d) / 2` in
+/// ymm12 and `d` in ymm13; the new value stays in ymm1.
+macro_rules! outer_uniform {
+	() => {
+		concat!(
+			"vfmadd213ps ymm1, ymm11, ymm0\n",
+			"vmovups ymm0, ymmword ptr [{u} + {i}]\n",
+			"vsubps ymm2, ymm0, ymmword ptr [{next} + {i}]\n",
+			"vmulps ymm2, ymm2, ymm13\n",
+			"vfmadd231ps ymm2, ymm1, ymm12\n",
+			"vaddps ymm1, ymm2, ymm0\n",
+			"vmovups ymmword ptr [{next} + {i}], ymm1\n",
+		)
+	};
+}
+
+/// [`outer_uniform`] with `c2` and `d` per cell from `{c2}` and `{d}`, `1 / 12` and 0.5 in ymm11 and ymm12:
+/// `next = c + ((c - next) d + ((L w c2) / 12 + w) (d 0.5 + 0.5))`.
+macro_rules! outer_planes {
+	() => {
+		concat!(
+			"vmulps ymm1, ymm1, ymmword ptr [{c2} + {i}]\n",
+			"vfmadd213ps ymm1, ymm11, ymm0\n",
+			"vmovups ymm3, ymmword ptr [{d} + {i}]\n",
+			"vmovups ymm0, ymmword ptr [{u} + {i}]\n",
+			"vsubps ymm2, ymm0, ymmword ptr [{next} + {i}]\n",
+			"vmulps ymm2, ymm2, ymm3\n",
+			"vfmadd213ps ymm3, ymm12, ymm12\n",
+			"vfmadd231ps ymm2, ymm1, ymm3\n",
+			"vaddps ymm1, ymm2, ymm0\n",
+			"vmovups ymmword ptr [{next} + {i}], ymm1\n",
+		)
+	};
+}
+
+/// The loop over 8-cell blocks of the DRP kernels: `{i}` from 0 by 32 bytes up to `{end}`, at least one block, the row
+/// pointers `{a}` and `{b}` with it.
+macro_rules! drp_loop {
+	($($body:expr),*) => {
+		concat!("2:\n", $($body,)* "add {a}, 32\n", "add {b}, 32\n", "add {i}, 32\n", "cmp {i}, {end}\n", "jb 2b\n")
+	};
+}
+
+/// The DRP kernels' view of seven rows cut to `len + 6` values: the rows 1 and 4 and the distance between rows, in
+/// bytes, when the rows lie equally far apart, as a plane's rows and a blocked step's do ([`drp_lap`] addresses them
+/// so); None otherwise.
+fn spaced(rows: &[&[f32]; 7]) -> Option<(*const f32, *const f32, isize)> {
+	let at = rows.map(|row| row.as_ptr() as isize);
+	let s = at[1].wrapping_sub(at[0]);
+	(1..7).all(|k| at[k].wrapping_sub(at[k - 1]) == s).then_some((rows[1].as_ptr(), rows[4].as_ptr(), s))
+}
+
+/// [`lap_row`] in AVX2 and FMA assembly (module docs, The DRP kernels); the last `len % 8` cells, and rows not equally
+/// far apart, go through the reference. Rounds differently: multiply-adds.
+fn lap_native(u: [&[f32]; 7], a: &[f32; 4], medium: RowMedium<'_>, w: &mut [f32]) {
+	// SAFETY: `RowKernels::native`, the only way to this kernel, asserts the CPU has AVX2 and FMA.
+	unsafe { lap_avx(u, a, medium, w) }
+}
+
+#[target_feature(enable = "avx2,fma")]
+fn lap_avx(u: [&[f32]; 7], a: &[f32; 4], medium: RowMedium<'_>, w: &mut [f32]) {
+	let len = w.len();
+	let rows = cut_rows(u, len);
+	let body = match spaced(&rows) {
+		Some(_) => len - len % 8,
+		None => 0,
+	};
+	if let (Some((r1, r4, s)), true) = (spaced(&rows), body > 0) {
+		let (o, end) = (w[..body].as_mut_ptr(), body * 4);
+		let [n1, n2, n3] = [1, 2, 3].map(|m| _mm256_set1_ps(-a[m]));
+		match medium {
+			RowMedium::Uniform { c2, .. } => {
+				// SAFETY: AVX2 and FMA are enabled on this function. The rows lie `s` bytes apart (`spaced`), so
+				// `{a} + {ns}` to `{b} + {s}*2` address rows 0 to 6 of the checked slices of len + 6 values; each block
+				// of 8 cells at byte i < end = body * 4 reads bytes i..i + 56 of each row and writes bytes i..i + 32 of
+				// `w`, within those slices and `w`'s first body values. Unaligned accesses (memory operands of VEX
+				// instructions need no alignment). No stack, the declared registers.
+				unsafe {
+					asm!(
+						drp_loop!(drp_lap!(), "vmulps ymm1, ymm1, ymm11\n", "vmovups ymmword ptr [{w} + {i}], ymm1\n"),
+						a = inout(reg) r1 => _, b = inout(reg) r4 => _, s = in(reg) s, ns = in(reg) -s,
+						w = in(reg) o, i = inout(reg) 0usize => _, end = in(reg) end,
+						in("ymm8") n1, in("ymm9") n2, in("ymm10") n3, in("ymm11") _mm256_set1_ps(c2),
+						out("ymm0") _, out("ymm1") _, out("ymm2") _, out("ymm3") _, out("ymm4") _,
+						options(nostack),
+					);
 				}
 			}
-		},
-	);
+			RowMedium::Planes { c2, .. } => {
+				let c2 = c2[..body].as_ptr();
+				// SAFETY: as above, and bytes i..i + 32 of `c2` read, within its first body values.
+				unsafe {
+					asm!(
+						drp_loop!(
+							drp_lap!(),
+							"vmulps ymm1, ymm1, ymmword ptr [{c2} + {i}]\n",
+							"vmovups ymmword ptr [{w} + {i}], ymm1\n"
+						),
+						a = inout(reg) r1 => _, b = inout(reg) r4 => _, s = in(reg) s, ns = in(reg) -s,
+						w = in(reg) o, c2 = in(reg) c2, i = inout(reg) 0usize => _, end = in(reg) end,
+						in("ymm8") n1, in("ymm9") n2, in("ymm10") n3,
+						out("ymm0") _, out("ymm1") _, out("ymm2") _, out("ymm3") _, out("ymm4") _,
+						options(nostack),
+					);
+				}
+			}
+		}
+	}
+	if body < len {
+		lap_body(rows.map(|row| &row[body..]), a, medium.from(body), &mut w[body..]);
+	}
+}
+
+/// [`outer_row`] in AVX2 and FMA assembly (module docs, The DRP kernels); the last `len % 8` cells, and rows not
+/// equally far apart, go through the reference. Rounds differently: multiply-adds, and a uniform run's `c2 / 12` and
+/// `(1 + d) / 2` taken once.
+fn outer_native(
+	u: &[f32],
+	w: [&[f32]; 7],
+	a: &[f32; 4],
+	medium: RowMedium<'_>,
+	next: &mut [f32],
+	stages: Option<Intensity<'_>>,
+) {
+	// SAFETY: `RowKernels::native`, the only way to this kernel, asserts the CPU has AVX2 and FMA.
+	unsafe { outer_avx(u, w, a, medium, next, stages) }
+}
+
+#[target_feature(enable = "avx2,fma")]
+fn outer_avx(
+	u: &[f32],
+	w: [&[f32]; 7],
+	a: &[f32; 4],
+	medium: RowMedium<'_>,
+	next: &mut [f32],
+	mut stages: Option<Intensity<'_>>,
+) {
+	let len = next.len();
+	let rows = cut_rows(w, len);
+	let body = match spaced(&rows) {
+		Some(_) => len - len % 8,
+		None => 0,
+	};
+	if let (Some((r1, r4, s)), true) = (spaced(&rows), body > 0) {
+		let (c, o, end) = (u[..body].as_ptr(), next[..body].as_mut_ptr(), body * 4);
+		let [n1, n2, n3] = [1, 2, 3].map(|m| _mm256_set1_ps(-a[m]));
+		let stages = stages.as_mut().map(|st| {
+			let alpha = st.alpha;
+			(st.s1[..body].as_mut_ptr(), st.s2[..body].as_mut_ptr(), _mm256_set1_ps(alpha), _mm256_set1_ps(1.0 - alpha))
+		});
+		// One loop per medium and stages: `$update` the update's macro, then its named and its register operands.
+		macro_rules! run {
+			($update:expr, [$($named:tt)*], [$($regs:tt)*]) => {
+				match stages {
+					// SAFETY: AVX2 and FMA are enabled on this function. The rows lie `s` bytes apart (`spaced`), so
+					// `{a} + {ns}` to `{b} + {s}*2` address rows 0 to 6 of the checked slices of len + 6 values; each
+					// block of 8 cells at byte i < end = body * 4 reads bytes i..i + 56 of each row and i..i + 32 of
+					// `u`, `next` and the medium's planes, and writes i..i + 32 of `next`, within those slices' first
+					// body values. Unaligned accesses (memory operands of VEX instructions need no alignment). No
+					// stack, the declared registers.
+					None => unsafe {
+						asm!(
+							drp_loop!(drp_lap!(), $update),
+							a = inout(reg) r1 => _, b = inout(reg) r4 => _, s = in(reg) s, ns = in(reg) -s,
+							u = in(reg) c, next = in(reg) o, i = inout(reg) 0usize => _, end = in(reg) end, $($named)*
+							in("ymm8") n1, in("ymm9") n2, in("ymm10") n3, $($regs)*
+							out("ymm0") _, out("ymm1") _, out("ymm2") _, out("ymm3") _, out("ymm4") _,
+							options(nostack),
+						);
+					},
+					// SAFETY: as above, and bytes i..i + 32 of the stages read and written, within their first body
+					// values.
+					Some((s1, s2, alpha, rest)) => unsafe {
+						asm!(
+							drp_loop!(drp_lap!(), $update, nine_stages!()),
+							a = inout(reg) r1 => _, b = inout(reg) r4 => _, s = in(reg) s, ns = in(reg) -s,
+							u = in(reg) c, next = in(reg) o, s1 = in(reg) s1, s2 = in(reg) s2,
+							i = inout(reg) 0usize => _, end = in(reg) end, $($named)*
+							in("ymm8") n1, in("ymm9") n2, in("ymm10") n3, $($regs)*
+							in("ymm14") alpha, in("ymm15") rest,
+							out("ymm0") _, out("ymm1") _, out("ymm2") _, out("ymm3") _, out("ymm4") _,
+							options(nostack),
+						);
+					},
+				}
+			};
+		}
+		match medium {
+			RowMedium::Uniform { c2, d } => {
+				let (k, h, d) = (_mm256_set1_ps(c2 * INV12), _mm256_set1_ps(centred(d)), _mm256_set1_ps(d));
+				run!(outer_uniform!(), [], [in("ymm11") k, in("ymm12") h, in("ymm13") d,]);
+			}
+			RowMedium::Planes { c2, d } => {
+				let (c2, d) = (c2[..body].as_ptr(), d[..body].as_ptr());
+				let (inv12, half) = (_mm256_set1_ps(INV12), _mm256_set1_ps(0.5));
+				run!(outer_planes!(), [c2 = in(reg) c2, d = in(reg) d,], [in("ymm11") inv12, in("ymm12") half,]);
+			}
+		}
+	}
+	if body < len {
+		let stages = stages.as_mut().map(|st| st.span(body, len - body));
+		outer_body(&u[body..], rows.map(|row| &row[body..]), a, medium.from(body), &mut next[body..], stages);
+	}
 }
 
 #[cfg(test)]
@@ -544,6 +851,135 @@ mod tests {
 				let case = Case::new(&mut values, len, uniform, stages);
 				let what = format!("{len} cells, uniform {uniform}, stages {stages}");
 				case.check(&case.run(nine_native), &case.run(nine_row), &what);
+			}
+		}
+	}
+
+	/// The DRP weights a0..a3 of the 4th-order stencil.
+	fn weights() -> [f32; 4] {
+		crate::engine::stencil::StencilCoefficients::of(crate::model::Stencil::FourthOrder).axis.map(|a| a as f32)
+	}
+
+	/// The inputs of the DRP kernels on a span of `len` cells: seven rows `spacing` values apart in one buffer (each
+	/// `len + 6` values long), the span's field, medium, previous values and stages.
+	struct DrpCase {
+		buf: Vec<f32>,
+		spacing: usize,
+		u: Vec<f32>,
+		c2: Vec<f32>,
+		d: Vec<f32>,
+		before: Vec<f32>,
+		s1: Vec<f32>,
+		s2: Vec<f32>,
+		uniform: bool,
+		stages: bool,
+	}
+
+	impl DrpCase {
+		fn new(values: &mut Values, len: usize, spacing: usize, uniform: bool, stages: bool) -> Self {
+			let buf = values.take(6 * spacing + len + 6, |v| v);
+			let (c2, d) = if uniform {
+				(vec![0.3 + 0.1 * values.next(); len.max(1)], vec![0.9 + 0.05 * values.next(); len.max(1)])
+			} else {
+				(values.take(len, |v| 0.3 + 0.2 * v), values.take(len, |v| 0.9 + 0.1 * v))
+			};
+			let (u, before) = (values.take(len, |v| v), values.take(len, |v| v));
+			let (s1, s2) = (values.take(len, f32::abs), values.take(len, f32::abs));
+			Self { buf, spacing, u, c2, d, before, s1, s2, uniform, stages }
+		}
+
+		fn rows(&self) -> [&[f32]; 7] {
+			let len = self.u.len();
+			std::array::from_fn(|k| &self.buf[k * self.spacing..][..len + 6])
+		}
+
+		fn medium(&self) -> RowMedium<'_> {
+			if self.uniform {
+				RowMedium::Uniform { c2: self.c2[0], d: self.d[0] }
+			} else {
+				RowMedium::Planes { c2: &self.c2, d: &self.d }
+			}
+		}
+
+		/// The largest magnitude a value of `L` of cell `x` is computed from: the taps times the weights' sum.
+		fn lap_scale(&self, x: usize) -> f32 {
+			let a = weights();
+			let taps = self.rows().iter().flat_map(|row| row[x..x + 7].iter()).fold(0f32, |m, v| m.max(v.abs()));
+			8.0 * (a[1].abs() + a[2].abs() + a[3].abs()) * taps
+		}
+
+		fn lap(&self, kernel: LapRow) -> Vec<f32> {
+			let len = self.u.len();
+			let mut w = guarded(&vec![0.0; len]);
+			kernel(self.rows(), &weights(), self.medium(), &mut w[SIDE..][..len]);
+			w
+		}
+
+		fn outer(&self, kernel: OuterRow) -> Outputs {
+			let len = self.u.len();
+			let mut out = Outputs { next: guarded(&self.before), s1: guarded(&self.s1), s2: guarded(&self.s2) };
+			let stages = self.stages.then(|| Intensity {
+				s1: &mut out.s1[SIDE..][..len],
+				s2: &mut out.s2[SIDE..][..len],
+				alpha: 0.95,
+			});
+			kernel(&self.u, self.rows(), &weights(), self.medium(), &mut out.next[SIDE..][..len], stages);
+			out
+		}
+	}
+
+	/// Asserts no value of `got` outside its `len` span differs from [`GUARD`].
+	fn guards_kept(got: &[f32], len: usize, what: &str) {
+		assert_eq!(got.len(), len + 2 * SIDE);
+		let guards = got[..SIDE].iter().chain(&got[SIDE + len..]);
+		assert!(guards.into_iter().all(|&v| v == GUARD), "{what}: written outside the span");
+	}
+
+	#[test]
+	fn the_assembly_drp_kernels_compute_the_reference_within_ulps_and_only_their_span() {
+		if !super::super::available() {
+			eprintln!("skipped: the CPU has no AVX2 and FMA");
+			return;
+		}
+		let mut values = Values(0x2545_f491);
+		let ulps = 8.0 * f32::EPSILON;
+		for len in (0..40).chain([1000, 1003]) {
+			// Rows a plane's stride apart, at two strides; both run the assembly. Rows not equally far apart, which
+			// the engine never hands over (its rows come from one plane), would go through the reference.
+			for spacing in [len + 6, len + 17] {
+				for (uniform, stages) in [(false, false), (false, true), (true, false), (true, true)] {
+					let case = DrpCase::new(&mut values, len, spacing, uniform, stages);
+					let what = format!("{len} cells {spacing} apart, uniform {uniform}, stages {stages}");
+					let (got, want) = (case.lap(lap_native), case.lap(lap_row));
+					guards_kept(&got, len, &format!("lap, {what}"));
+					for x in 0..len {
+						let (g, w, scale) =
+							(got[SIDE + x], want[SIDE + x], case.lap_scale(x) * case.c2[x.min(case.c2.len() - 1)]);
+						assert!((g - w).abs() <= ulps * scale, "lap, {what}: {g} at {x}, the reference's {w}");
+					}
+					let (got, want) = (case.outer(outer_native), case.outer(outer_row));
+					for (name, g) in [("next", &got.next), ("s1", &got.s1), ("s2", &got.s2)] {
+						guards_kept(g, len, &format!("outer {name}, {what}"));
+					}
+					for x in 0..len {
+						let c2 = case.c2[x.min(case.c2.len() - 1)];
+						let wc = case.rows()[3][x + 3].abs();
+						let next = case.u[x].abs() + case.before[x].abs() + wc + c2 * case.lap_scale(x);
+						let s1 = case.s1[x] + next * next;
+						let s2 = case.s2[x] + s1;
+						let at = SIDE + x;
+						for (name, g, w, scale) in [
+							("next", got.next[at], want.next[at], next),
+							("s1", got.s1[at], want.s1[at], s1),
+							("s2", got.s2[at], want.s2[at], s2),
+						] {
+							assert!(
+								(g - w).abs() <= ulps * scale,
+								"outer, {what}: {name} at {x} is {g}, the reference's {w}"
+							);
+						}
+					}
+				}
 			}
 		}
 	}

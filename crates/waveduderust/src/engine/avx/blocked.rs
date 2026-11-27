@@ -1,4 +1,4 @@
-//! The 9-point step with its sub-steps fused into one sweep over the rows (module docs of engine/avx, Blocked steps).
+//! A step with its sub-steps fused into one sweep over the rows (module docs of engine/avx, Blocked steps).
 //!
 //! A unit is the work of one grid row at one level `j` (1..=n) of the step, level 0 being the field before it:
 //!
@@ -9,22 +9,32 @@
 //!   cells, and on the first and last grid rows the rings above and below.
 //! - `Y(q, j)`, with a rim, on a y-strip row of the area: psi of y of level `j - 1`.
 //!
+//! The 4th order splits the update in two: `W(q, j)` writes `w = c2 L u` of level `j - 1` into row `q` of the plane
+//! `w`, with a rim xi of y, `delta_y` and the x part of the rim's first application, then adds the forcing of sub-step
+//! `j - 1` to the row's driven cells; `D(q, j)` takes, with a rim, xi of y and `delta_y` of the second application
+//! (on `w`), the outer update of row `q` from level `j - 1` and `w` (the intensity stages on level `n`), the second
+//! application's x part, and Mur's condition as above. With a rim, psi of y is a unit per application: on the field
+//! before `W`, on `w` before `D`.
+//!
 //! Each unit reads and writes the state of its own row and reads its neighbours': `D` reads the field of level `j - 1`
 //! within 1 row, or 3 with a rim (`delta_y`'s second derivative), and psi of y within 2 rows; `Y` reads the field
 //! within 2 rows (a first derivative; it is handed 7 rows, of which the outer two are unused). Level `j` is written in
-//! place over level `j - 2` (the planes alternate), so a unit also waits for the readers of what it overwrites.
-//! [`Tiling`] derives from these which units a band of rows can run without its neighbours, and the order.
+//! place over level `j - 2` (the planes alternate), so a unit also waits for the readers of what it overwrites. The 4th
+//! order's `W` reads the field within 3 rows (its stencil, `delta_y`), `D` reads `w` within 3 rows and the field of
+//! its own row; `w` of level `j` is written over level `j - 1`. [`kinds`] lists these reads, and [`Tiling`] derives
+//! from them which units a band of rows can run without its neighbours, and the order.
 
 use std::ops::Range;
 
 use rayon::prelude::*;
 
+use super::super::cpu::Rows;
 use super::super::forcing::live;
 use super::super::mur::MurChain;
-use super::super::pml::{RimTables, XLine, XPass, XScratch};
-use super::super::stencil::{PAD, centred};
-use super::NineLine;
+use super::super::pml::{RimMemory, RimTables, XLine, XPass, XScratch};
+use super::super::stencil::{PAD, TimeScheme, centred};
 use super::kernels::Intensity;
+use super::{DrpLine, NineLine};
 
 /// A buffer the units of a blocked step share across threads: each unit takes the rows it reads and writes as slices
 /// for its own duration, and the tiling keeps any two units that run at once off each other's written rows.
@@ -101,121 +111,247 @@ impl MurRows {
 	}
 }
 
+/// A kind of unit of a blocked step: what it computes, what it reads and how long what it writes lives. See the module
+/// docs.
+struct Kind {
+	unit: Unit,
+	/// The levels its output lives: a unit of level `j` writes over the value of level `j - keeps` of its row.
+	keeps: usize,
+	/// The rows each side of its own whose slices it takes from the buffers it reads.
+	span: usize,
+	reads: Vec<Read>,
+	/// Rows ahead of the sweep's front of its level at which it runs (derived).
+	offset: usize,
+}
+
+/// What a unit `X(q, j)` reads: the output of the kind `of` of level `j - back`, on the rows within `reach` of `q`.
+#[derive(Clone, Copy)]
+struct Read {
+	of: usize,
+	back: usize,
+	reach: usize,
+}
+
+/// The units of a blocked step: one kind each, run in this order within a tick of the sweep.
+fn kinds(scheme: TimeScheme, rim: bool) -> Vec<Kind> {
+	let kind = |unit, keeps, span, reads: &[(usize, usize, usize)]| Kind {
+		unit,
+		keeps,
+		span,
+		reads: reads.iter().map(|&(of, back, reach)| Read { of, back, reach }).collect(),
+		offset: 0,
+	};
+	match (scheme, rim) {
+		// D: the field within 1 row, the older level of its row.
+		(TimeScheme::Leapfrog, false) => vec![kind(Unit::Update, 2, 1, &[(0, 1, 1), (0, 2, 0)])],
+		// Y: the field within 2 rows (7 rows handed). D: psi of y within 2 rows, the field within 3.
+		(TimeScheme::Leapfrog, true) => {
+			vec![kind(Unit::Psi(0), 1, 3, &[(1, 1, 2)]), kind(Unit::Update, 2, 3, &[(0, 0, 2), (1, 1, 3), (1, 2, 0)])]
+		}
+		// W: the field within 3 rows. D: `w` within 3 rows, the field of its row, the older level of its row.
+		(TimeScheme::ModifiedEquation, false) => {
+			vec![kind(Unit::Lap, 1, 3, &[(1, 1, 3)]), kind(Unit::Update, 2, 3, &[(0, 0, 3), (1, 1, 0), (1, 2, 0)])]
+		}
+		// Yu: the field within 2 rows. W: the field within 3 (the stencil, `delta_y`), psi of y on it within 2. Yw: `w`
+		// within 2 rows. D: `w` within 3 rows (the stencil, `delta_y`), psi of y on it within 2, the field of its row,
+		// the older level of its row.
+		(TimeScheme::ModifiedEquation, true) => vec![
+			kind(Unit::Psi(0), 1, 3, &[(3, 1, 2)]),
+			kind(Unit::Lap, 1, 3, &[(3, 1, 3), (0, 0, 2)]),
+			kind(Unit::Psi(1), 1, 3, &[(1, 0, 2)]),
+			kind(Unit::Update, 2, 3, &[(1, 0, 3), (2, 0, 2), (3, 1, 0), (3, 2, 0)]),
+		],
+	}
+}
+
+/// What a unit computes (module docs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Unit {
+	/// psi of y of the rim's application `set` on a y-strip row: of the field of level `j - 1` (set 0) or of `w` of
+	/// level `j` (set 1, the 4th order).
+	Psi(usize),
+	/// The 4th order's `w` of level `j`.
+	Lap,
+	/// The row's update to level `j`, then Mur's condition.
+	Update,
+}
+
 /// Which units of a blocked step of `n` levels each part runs, and in what order. See the module docs.
 ///
-/// A band of rows `a..b` runs, in a first parallel phase, the units whose inputs and whose overwritten values'
-/// readers all lie in the band: at level `j` the `D` units of `a + sd(j)..b - sd(j)` and the `Y` units of
-/// `a + sy(j)..b - sy(j)`, shrunk only at a side where another band lies. A second parallel phase runs the rest, the
-/// units of `b - sd(j)..b + sd(j)` (and `sy`) around each boundary `b` between bands. Bands of at least
-/// [`min_band`](Self::min_band) rows keep any two boundaries' units off each other's rows.
+/// A band of rows `a..b` runs, in a first parallel phase, the units whose inputs and whose overwritten values' readers
+/// all lie in the band: at level `j` the units of kind `k` on `a + s_k(j)..b - s_k(j)`, shrunk only at a side where
+/// another band lies. A second parallel phase runs the rest, the units of `b - s_k(j)..b + s_k(j)` around each
+/// boundary `b` between bands. Bands of at least [`min_band`](Self::min_band) rows keep any two boundaries' units off
+/// each other's rows.
 ///
-/// The shrinks: `Y(q, j)` reads the field of level `j - 1` within `ry` rows and overwrites psi of y of level `j - 2`,
-/// which the `D` units of level `j - 1` within 2 rows read: `sy(j) = sd(j - 1) + max(ry, 2)` (`sy(1) = 0`). `D(q, j)`
-/// reads psi of y of level `j - 1` within 2 rows and the field within `rd` rows, and overwrites the field of level
-/// `j - 2`, which the `D` units of level `j - 1` within `rd` rows and the `Y` units within `ry` rows read:
-/// `sd(j) = max(sy(j) + 2, sd(j - 1) + rd, sy(j - 1) + ry)`, `sd(1) = 2`. With a rim `rd` is 3 and `ry` 2, so
-/// `sd(j) = 4 j - 2`; without one there are no `Y` units and `rd` is 1: `sd(j) = j - 1`.
+/// The shrinks follow from the kinds' reads ([`kinds`]). If `X(q, j)` reads the output of `P` of level `j - back`
+/// within `reach` rows, `X` runs in the band only where `P` does: `s_X(j) >= s_P(j - back) + reach`. And `P(q, j)`
+/// overwrites the value of level `j - keeps_P` of its row, which that read takes at level `j' = j - keeps_P + back`,
+/// so `P` runs in the band only where those readers do: `s_P(j) >= s_X(j') + reach`. Each shrink is the least that
+/// meets both, level by level and kind by kind in the tick's order.
 ///
-/// Within a part the units run in one sweep: at tick `t`, for each level `j` in turn, `Y(f + 2, j)` and `D(f, j)` with
-/// `f = t - (j - 1) lag`. A unit's inputs then come from the ticks before or from lower levels of the same tick, and the
-/// readers of what it overwrites have run: `lag` 1 without a rim, 4 with one (`Y(f + 2, j)` reads `D(f + 4, j - 1)`,
-/// and `D(f, j)` overwrites what `D(f + 3, j - 1)` and `Y(f + 2, j - 1)` read).
+/// Within a part the units run in one sweep: at tick `t`, for each level `j` in turn and each kind `k` in order, the
+/// unit of row `f + o_k` with `f = t - (j - 1) lag`. A read of the same level is of a kind earlier in the tick, so its
+/// offset `o_P >= o_X + reach` gives it the rows `X` reads; a read of `back` levels down needs
+/// `back lag + o_P >= o_X + reach`, and an overwrite `d = keeps_P - back` levels above its readers
+/// `d lag + o_X >= o_P + reach`. `lag` is the least that meets them all: 1 for the 9-point, 4 with a rim; 6 for the
+/// 4th order, 8 with a rim. The update's shrink comes out as `sd(j) = j - 1` for the 9-point, `4 j - 2` with a rim;
+/// `6 j - 3` for the 4th order, `8 j - 2` with a rim (the tests below).
 pub(super) struct Tiling {
 	n: usize,
+	scheme: TimeScheme,
 	rim: bool,
+	kinds: Vec<Kind>,
 	lag: usize,
-	/// The farthest any unit reads the field.
+	/// The farthest any unit takes rows from its own.
 	rho: usize,
-	/// `sd(j)` and `sy(j)` at `j - 1`.
-	sd: Vec<usize>,
-	sy: Vec<usize>,
+	/// `s_k(j)` at `shrink[k][j - 1]`.
+	shrink: Vec<Vec<usize>>,
 }
 
 impl Tiling {
-	pub(super) fn new(n: usize, rim: bool) -> Self {
-		// The field's reach of `D` and of `Y`, psi of y's of `D`, and the sweep's lag (above).
-		let (rd, ry, psi, lag) = if rim { (3, 2, 2, 4) } else { (1, 0, 0, 1) };
-		let (mut sd, mut sy) = (vec![psi], vec![0]);
-		for j in 1..n {
-			sy.push(sd[j - 1] + ry.max(psi));
-			sd.push((sy[j] + psi).max(sd[j - 1] + rd).max(sy[j - 1] + ry));
+	pub(super) fn new(n: usize, scheme: TimeScheme, rim: bool) -> Self {
+		let mut kinds = kinds(scheme, rim);
+		// The offsets, from the tick's last kind back.
+		for k in (0..kinds.len()).rev() {
+			let offset = (k + 1..kinds.len())
+				.flat_map(|x| kinds[x].reads.iter().filter(|r| r.of == k && r.back == 0).map(move |r| (x, r.reach)))
+				.map(|(x, reach)| kinds[x].offset + reach)
+				.max()
+				.unwrap_or(0);
+			kinds[k].offset = offset;
 		}
-		Self { n, rim, lag, rho: rd, sd, sy }
+		let mut lag = 1;
+		let need = |levels: usize, over: usize| over.div_ceil(levels);
+		for (x, kind) in kinds.iter().enumerate() {
+			for &Read { of, back, reach } in &kind.reads {
+				let (o_x, o_p) = (kind.offset, kinds[of].offset);
+				if back == 0 {
+					assert!(of < x && o_p >= o_x + reach, "a read of the same level comes earlier in the tick");
+				} else {
+					lag = lag.max(need(back, (o_x + reach).saturating_sub(o_p)));
+				}
+				match kinds[of].keeps - back {
+					0 => assert!(of == x && reach == 0, "only a unit's own row of what it overwrites"),
+					d => lag = lag.max(need(d, (o_p + reach).saturating_sub(o_x))),
+				}
+			}
+		}
+		let mut shrink = vec![Vec::with_capacity(n); kinds.len()];
+		for j in 1..=n {
+			for k in 0..kinds.len() {
+				let mut s = 0;
+				for &Read { of, back, reach } in &kinds[k].reads {
+					if back < j && !(of == k && back == 0) {
+						s = s.max(shrink[of][j - back - 1] + reach);
+					}
+				}
+				for (x, kind) in kinds.iter().enumerate() {
+					for read in kind.reads.iter().filter(|r| r.of == k) {
+						let level = (j + read.back).checked_sub(kinds[k].keeps).filter(|&l| l >= 1);
+						match level {
+							Some(l) if l < j => s = s.max(shrink[x][l - 1] + read.reach),
+							Some(_) if x != k => s = s.max(shrink[x][j - 1] + read.reach),
+							_ => {}
+						}
+					}
+				}
+				shrink[k].push(s);
+			}
+		}
+		let rho = kinds.iter().map(|k| k.span).max().unwrap_or(0);
+		Self { n, scheme, rim, kinds, lag, rho, shrink }
 	}
 
-	/// Whether this is the tiling of `n` levels with or without a rim.
-	pub(super) fn is(&self, n: usize, rim: bool) -> bool {
-		(self.n, self.rim) == (n, rim)
+	/// Whether this is the tiling of `n` levels of `scheme` with or without a rim.
+	pub(super) fn is(&self, n: usize, scheme: TimeScheme, rim: bool) -> bool {
+		(self.n, self.scheme, self.rim) == (n, scheme, rim)
 	}
 
 	/// The fewest rows of a band.
 	pub(super) fn min_band(&self) -> usize {
-		2 * self.sd[self.n - 1].max(self.sy[self.n - 1]) + self.rho
+		2 * self.shrink.iter().flatten().copied().max().unwrap_or(0) + self.rho
 	}
 
-	/// Runs `y(q, j)` and `d(q, j)` on the units `d_rows(j)` and `y_rows(j)` in the sweep's order.
-	fn sweep(
-		&self,
-		d_rows: impl Fn(usize) -> Range<usize>,
-		y_rows: impl Fn(usize) -> Range<usize>,
-		mut y: impl FnMut(usize, usize),
-		mut d: impl FnMut(usize, usize),
-	) {
+	/// Runs `unit(u, q, j)` on the units `rows(k, j)` of each kind `k` in the sweep's order.
+	fn sweep(&self, rows: impl Fn(usize, usize) -> Range<usize>, mut unit: impl FnMut(Unit, usize, usize)) {
 		let (mut lo, mut hi) = (usize::MAX, 0);
-		for r in (1..=self.n).flat_map(|j| [d_rows(j), y_rows(j)]).filter(|r| !r.is_empty()) {
-			(lo, hi) = (lo.min(r.start), hi.max(r.end));
+		for r in (1..=self.n).flat_map(|j| (0..self.kinds.len()).map(move |k| (k, j))).map(|(k, j)| rows(k, j)) {
+			if !r.is_empty() {
+				(lo, hi) = (lo.min(r.start), hi.max(r.end));
+			}
 		}
 		if lo >= hi {
 			return;
 		}
-		for t in lo as isize - 2..(hi + (self.n - 1) * self.lag) as isize {
+		let ahead = self.kinds.iter().map(|k| k.offset).max().unwrap_or(0);
+		for t in lo as isize - ahead as isize..(hi + (self.n - 1) * self.lag) as isize {
 			for j in 1..=self.n {
 				let f = t - ((j - 1) * self.lag) as isize;
-				if f + 2 >= 0 && y_rows(j).contains(&((f + 2) as usize)) {
-					y((f + 2) as usize, j);
-				}
-				if f >= 0 && d_rows(j).contains(&(f as usize)) {
-					d(f as usize, j);
+				for (k, kind) in self.kinds.iter().enumerate() {
+					let q = f + kind.offset as isize;
+					if q >= 0 && rows(k, j).contains(&(q as usize)) {
+						unit(kind.unit, q as usize, j);
+					}
 				}
 			}
 		}
 	}
 
 	/// The first phase's units of the band `rows`, `inner` telling whether another band lies above and below it.
-	pub(super) fn band(
-		&self,
-		rows: Range<usize>,
-		inner: (bool, bool),
-		y: impl FnMut(usize, usize),
-		d: impl FnMut(usize, usize),
-	) {
+	pub(super) fn band(&self, rows: Range<usize>, inner: (bool, bool), unit: impl FnMut(Unit, usize, usize)) {
 		let within = |shrink: usize| {
 			let (top, bottom) = (if inner.0 { shrink } else { 0 }, if inner.1 { shrink } else { 0 });
 			(rows.start + top)..rows.end.saturating_sub(bottom).max(rows.start + top)
 		};
-		self.sweep(|j| within(self.sd[j - 1]), |j| within(self.sy[j - 1]), y, d);
+		self.sweep(|k, j| within(self.shrink[k][j - 1]), unit);
 	}
 
 	/// The second phase's units around the boundary `b` between two bands.
-	pub(super) fn seam(&self, b: usize, y: impl FnMut(usize, usize), d: impl FnMut(usize, usize)) {
-		let around = |shrink: usize| b - shrink..b + shrink;
-		self.sweep(|j| around(self.sd[j - 1]), |j| around(self.sy[j - 1]), y, d);
+	pub(super) fn seam(&self, b: usize, unit: impl FnMut(Unit, usize, usize)) {
+		self.sweep(|k, j| b - self.shrink[k][j - 1]..b + self.shrink[k][j - 1], unit);
 	}
 }
 
-/// The rim's state for a blocked step: the tables, the memory variables of application 0 and the pass's columns.
+/// The rim's state for a blocked step: the tables, z~ of each grid row, and the memory variables of each application
+/// with its pass's columns and scale (one application for the 9-point, two for the 4th order).
 pub(super) struct Rim<'a> {
 	pub(super) tables: RimTables<'a>,
+	pub(super) z: Shared,
+	pub(super) sets: Vec<RimSet<'a>>,
+}
+
+/// One application's memory variables in a blocked step, and the pass it corrects.
+pub(super) struct RimSet<'a> {
 	pub(super) psi_y: Shared,
 	pub(super) xi_y: Shared,
 	pub(super) delta: Shared,
 	pub(super) psi_x: Shared,
 	pub(super) xi_x: Shared,
-	pub(super) z: Shared,
 	pub(super) pass: XPass<'a>,
 }
 
-/// A blocked 9-point step: what its units read and write. Level `j` lives in `planes[j % 2]`.
+impl<'a> RimSet<'a> {
+	/// The set of `memory`, correcting `pass`.
+	pub(super) fn of(memory: RimMemory<'_>, pass: XPass<'a>) -> Self {
+		Self {
+			psi_y: Shared::of(memory.psi_y),
+			xi_y: Shared::of(memory.xi_y),
+			delta: Shared::of(memory.delta),
+			psi_x: Shared::of(memory.psi_x),
+			xi_x: Shared::of(memory.xi_x),
+			pass,
+		}
+	}
+}
+
+/// How a blocked step updates a row: the 9-point leapfrog, or the 4th order's two passes through the plane `w`.
+pub(super) enum Line<'a> {
+	Nine(NineLine<'a>),
+	Drp(DrpLine<'a>, Shared),
+}
+
+/// A blocked step: what its units read and write. Level `j` lives in `planes[j % 2]`.
 pub(super) struct Step<'a> {
 	pub(super) s: usize,
 	pub(super) gw: usize,
@@ -226,7 +362,7 @@ pub(super) struct Step<'a> {
 	/// The intensity stages and their weight, advanced on level `n` when given.
 	pub(super) stages: Option<(Shared, Shared, f32)>,
 	pub(super) alpha: f32,
-	pub(super) line: NineLine<'a>,
+	pub(super) line: Line<'a>,
 	pub(super) d: &'a [f32],
 	pub(super) cuts: &'a [u8],
 	/// The grid rows the passes run on; the columns are `line`'s.
@@ -259,101 +395,218 @@ impl Step<'_> {
 		let scratch = || self.rim.as_ref().map(|rim| rim.tables.scratch());
 		let band = |scratch: &mut Option<XScratch>, k: usize| {
 			let inner = (k > 0, k + 1 < count);
-			tiling.band(start(k)..start(k + 1), inner, |q, j| self.y_unit(q, j), |q, j| self.d_unit(q, j, scratch));
+			tiling.band(start(k)..start(k + 1), inner, |unit, q, j| self.unit(unit, q, j, scratch));
 		};
 		if count == 1 {
 			return band(&mut scratch(), 0);
 		}
 		(0..count).into_par_iter().for_each_init(scratch, band);
 		(1..count).into_par_iter().for_each_init(scratch, |scratch, k| {
-			tiling.seam(start(k), |q, j| self.y_unit(q, j), |q, j| self.d_unit(q, j, scratch));
+			tiling.seam(start(k), |unit, q, j| self.unit(unit, q, j, scratch));
 		});
 	}
 
-	/// `Y(q, j)`: psi of y of level `j - 1` on y-strip row `q` of the area; nothing on other rows.
-	fn y_unit(&self, q: usize, j: usize) {
-		let Some(rim) = &self.rim else { return };
-		let Some(k) = rim.tables.strip_row(q).filter(|_| self.area.contains(&q)) else { return };
-		let (s, gw, r) = (self.s, self.gw, q + PAD);
-		// SAFETY: the planes and the CPML's memory outlive the step. The tiling runs no unit that writes the field of
-		// level `j - 1` within 3 rows of `q` or psi of y of row `q` while this one runs, and no other unit touches psi
-		// of y of row `q`.
-		let (field, line) = unsafe {
-			(self.planes[(j - 1) % 2].get((r - 3) * s..(r + 4) * s), rim.psi_y.get_mut(k * gw..(k + 1) * gw))
-		};
+	/// Unit `unit` of row `q` and level `j`.
+	fn unit(&self, unit: Unit, q: usize, j: usize, scratch: &mut Option<XScratch>) {
 		super::wide(
 			#[inline(always)]
-			|| rim.tables.psi_y_line(q, field, self.cuts, &rim.pass.xs, line),
-		);
-	}
-
-	/// `D(q, j)`: row `q` from level `j - 1` to level `j` (module docs).
-	fn d_unit(&self, q: usize, j: usize, scratch: &mut Option<XScratch>) {
-		super::wide(
-			#[inline(always)]
-			|| {
-				if self.area.contains(&q) {
-					self.update(q, j, scratch);
+			|| match unit {
+				Unit::Psi(set) => self.psi(set, q, j),
+				Unit::Lap => {
+					if self.area.contains(&q) {
+						self.lap(q, j, scratch);
+					}
 				}
-				self.open_edges(q, j);
+				Unit::Update => {
+					if self.area.contains(&q) {
+						match &self.line {
+							Line::Nine(line) => self.leapfrog(line, q, j, scratch),
+							Line::Drp(line, w) => self.outer(line, *w, q, j, scratch),
+						}
+					}
+					self.open_edges(q, j);
+				}
 			},
 		);
 	}
 
-	/// The passes of `D(q, j)` on a row of the area: `delta_y`, the leapfrog update, the rim's x part and the forcing.
+	/// The buffer application `set` of the rim takes the derivatives of on level `j`: the field of level `j - 1`, or
+	/// the 4th order's `w`.
+	fn field(&self, set: usize, j: usize) -> Shared {
+		match (&self.line, set) {
+			(Line::Drp(_, w), 1) => *w,
+			_ => self.planes[(j - 1) % 2],
+		}
+	}
+
+	/// psi of y of application `set` on y-strip row `q` of the area; nothing on other rows.
 	#[inline(always)]
-	fn update(&self, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+	fn psi(&self, set: usize, q: usize, j: usize) {
+		let Some(rim) = &self.rim else { return };
+		let Some(k) = rim.tables.strip_row(q).filter(|_| self.area.contains(&q)) else { return };
+		let (s, gw, r, memory) = (self.s, self.gw, q + PAD, &rim.sets[set]);
+		// SAFETY: the planes, `w` and the CPML's memory outlive the step. The tiling runs no unit that writes the rows
+		// within 3 of `q` of the buffer `set` reads, or psi of y of row `q`, while this one runs, and no other unit
+		// touches psi of y of row `q`.
+		let (field, line) =
+			unsafe { (self.field(set, j).get((r - 3) * s..(r + 4) * s), memory.psi_y.get_mut(k * gw..(k + 1) * gw)) };
+		rim.tables.psi_y_line(q, field, self.cuts, &memory.pass.xs, line);
+	}
+
+	/// xi of y and `delta_y` of application `set` on row `q` when it is a y-strip row, from the 7 rows `field` around
+	/// it; the row's y-strip row.
+	#[inline(always)]
+	fn delta(&self, set: usize, q: usize, field: &[f32]) -> Option<usize> {
+		let rim = self.rim.as_ref()?;
+		let k = rim.tables.strip_row(q)?;
+		let (gw, memory) = (self.gw, &rim.sets[set]);
+		let psi = |dk: isize| match rim.tables.neighbour_row(k, dk) {
+			// SAFETY: the CPML's memory outlives the step; the tiling runs no unit writing psi of y of application
+			// `set` within 2 rows of `q`, or xi of y and `delta_y` of row `q`, while this one runs.
+			Some(row) => unsafe { memory.psi_y.get(row * gw..(row + 1) * gw) },
+			None => &rim.tables.zeros()[..gw],
+		};
+		// SAFETY: as above.
+		let (xi, delta) =
+			unsafe { (memory.xi_y.get_mut(k * gw..(k + 1) * gw), memory.delta.get_mut(k * gw..(k + 1) * gw)) };
+		rim.tables.delta_y_line(q, field, self.cuts, &memory.pass.xs, [psi(1), psi(-1), psi(2), psi(-2)], xi, delta);
+		Some(k)
+	}
+
+	/// The x part of application `set` on row `q`, `line` its grid cells: psi of x and the correction from the 3 rows
+	/// `field` from the one above, and from the row's `delta_y` when `strip` gives its y-strip row.
+	#[inline(always)]
+	fn x_part(
+		&self,
+		set: usize,
+		q: usize,
+		field: &[f32],
+		strip: Option<usize>,
+		line: &mut [f32],
+		scratch: &mut Option<XScratch>,
+	) {
+		let (Some(rim), Some(scratch)) = (&self.rim, scratch.as_mut()) else { return };
+		let (gw, memory) = (self.gw, &rim.sets[set]);
+		let (w, zw) = (2 * rim.tables.rim(), rim.tables.z_width());
+		// SAFETY: the CPML's memory outlives the step; `delta_y` of application `set` of row `q`, its x part's memory
+		// and z~ of row `q` are this unit's alone while it runs.
+		let (delta, memory) = unsafe {
+			let delta = strip.map(|k| memory.delta.get(k * gw..(k + 1) * gw));
+			let x = XLine {
+				psi: memory.psi_x.get_mut(q * w..(q + 1) * w),
+				xi: memory.xi_x.get_mut(q * w..(q + 1) * w),
+				z: rim.z.get_mut(q * zw..(q + 1) * zw),
+			};
+			(delta, x)
+		};
+		rim.tables.x_line(q, field, delta, memory, line, scratch, &rim.sets[set].pass);
+	}
+
+	/// The intensity stages of row `q` on level `n`.
+	///
+	/// # Safety
+	///
+	/// Only the update of row `q` to level `j` may call it, once, and nothing else may hold row `q` of the stages
+	/// while the slices live.
+	#[inline(always)]
+	#[allow(clippy::mut_from_ref)]
+	unsafe fn row_stages(&self, q: usize, j: usize) -> Option<(&mut [f32], &mut [f32])> {
+		let (s, r) = (self.s, q + PAD);
+		self.stages.filter(|_| j == self.n).map(|(s1, s2, _)| {
+			// SAFETY: the stages outlive the step, and the caller is the one update of row `q` to level `n`.
+			unsafe { (s1.get_mut(r * s..(r + 1) * s), s2.get_mut(r * s..(r + 1) * s)) }
+		})
+	}
+
+	/// The 9-point's update of row `q` of the area to level `j`: `delta_y`, the leapfrog update, the rim's x part and
+	/// the forcing.
+	#[inline(always)]
+	fn leapfrog(&self, line: &NineLine<'_>, q: usize, j: usize, scratch: &mut Option<XScratch>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
-		// The rim's y stages of a y-strip row: psi of y of the rows within 2 in its strip (zeros beyond it), the
-		// field of level `j - 1` within 3 rows.
-		let strip = self.rim.as_ref().and_then(|rim| Some((rim, rim.tables.strip_row(q)?)));
-		if let Some((rim, k)) = strip {
-			let psi = |dk: isize| match rim.tables.neighbour_row(k, dk) {
-				// SAFETY: the planes and the CPML's memory outlive the step; the tiling runs no unit writing psi of y
-				// within 2 rows of `q`, the field of level `j - 1` within 3 rows, or xi of y and `delta_y` of row `q`
-				// while this one runs.
-				Some(row) => unsafe { rim.psi_y.get(row * gw..(row + 1) * gw) },
-				None => &rim.tables.zeros()[..gw],
-			};
-			// SAFETY: as above.
-			let (field, xi, delta) = unsafe {
-				(
-					src.get((r - 3) * s..(r + 4) * s),
-					rim.xi_y.get_mut(k * gw..(k + 1) * gw),
-					rim.delta.get_mut(k * gw..(k + 1) * gw),
-				)
-			};
-			rim.tables.delta_y_line(q, field, self.cuts, &rim.pass.xs, [psi(1), psi(-1), psi(2), psi(-2)], xi, delta);
-		}
-		// SAFETY: the planes and the stages outlive the step. The tiling runs no unit writing the field of level `j - 1`
-		// within 1 row of `q` while this one runs, and no other unit touches row `q` of level `j`'s plane or of the
-		// stages.
-		let (u, next) = unsafe { (src.get((r - 1) * s..(r + 2) * s), dst.get_mut(r * s..(r + 1) * s)) };
-		let mut stages = self.stages.filter(|_| j == self.n).map(|(s1, s2, _)| {
-			// SAFETY: as above.
-			unsafe { (s1.get_mut(r * s..(r + 1) * s), s2.get_mut(r * s..(r + 1) * s)) }
+		// The rim's y stages of a y-strip row read the field of level `j - 1` within 3 rows.
+		let strip = self.rim.as_ref().and_then(|_| {
+			// SAFETY: the planes outlive the step; the tiling runs no unit writing the field of level `j - 1` within 3
+			// rows of `q` while this one runs.
+			self.delta(0, q, unsafe { src.get((r - 3) * s..(r + 4) * s) })
 		});
-
+		// SAFETY: the planes outlive the step. The tiling runs no unit writing the field of level `j - 1` within 1 row
+		// of `q` while this one runs, and no other unit touches row `q` of level `j`'s plane.
+		let (u, next) = unsafe { (src.get((r - 1) * s..(r + 2) * s), dst.get_mut(r * s..(r + 1) * s)) };
+		// SAFETY: this is the update of row `q` to level `j`, which the tiling runs once and alone on the row.
+		let mut stages = unsafe { self.row_stages(q, j) };
 		let alpha = self.alpha;
 		let intensity =
 			stages.as_mut().map(|(s1, s2)| Intensity { s1: &mut s1[PAD..][..gw], s2: &mut s2[PAD..][..gw], alpha });
-		self.line.row(r, u, &mut next[PAD..][..gw], intensity);
-		if let (Some(rim), Some(scratch)) = (&self.rim, scratch.as_mut()) {
-			let (w, zw) = (2 * rim.tables.rim(), rim.tables.z_width());
-			// SAFETY: as above: `delta_y` of row `q` and the x part's memory of row `q` are this unit's alone.
-			let (delta, memory) = unsafe {
-				let delta = strip.map(|(_, k)| rim.delta.get(k * gw..(k + 1) * gw));
-				let memory = XLine {
-					psi: rim.psi_x.get_mut(q * w..(q + 1) * w),
-					xi: rim.xi_x.get_mut(q * w..(q + 1) * w),
-					z: rim.z.get_mut(q * zw..(q + 1) * zw),
-				};
-				(delta, memory)
-			};
-			rim.tables.x_line(q, u, delta, memory, &mut next[PAD..][..gw], scratch, &rim.pass);
-		}
+		line.row(r, u, &mut next[PAD..][..gw], intensity);
+		self.x_part(0, q, u, strip, &mut next[PAD..][..gw], scratch);
 		self.force(q, j, next, stages);
+	}
+
+	/// The 4th order's `W(q, j)` on a row of the area: `w = c2 L u` from the field of level `j - 1`, with the rim's
+	/// first application (`delta_y` and the x part), then the forcing of sub-step `j - 1` on its driven cells.
+	#[inline(always)]
+	fn lap(&self, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+		let Line::Drp(line, w) = &self.line else { return };
+		let (s, gw, r) = (self.s, self.gw, q + PAD);
+		// SAFETY: the planes and `w` outlive the step. The tiling runs no unit writing the field of level `j - 1`
+		// within 3 rows of `q` while this one runs, and no other unit touches row `q` of `w`.
+		let (u, out) =
+			unsafe { (self.planes[(j - 1) % 2].get((r - 3) * s..(r + 4) * s), w.get_mut(r * s..(r + 1) * s)) };
+		let strip = self.delta(0, q, u);
+		let rows: Rows<'_> = std::array::from_fn(|k| &u[k * s..][..s]);
+		line.lap(r, &rows, &mut out[PAD..][..gw]);
+		self.x_part(0, q, &u[2 * s..5 * s], strip, &mut out[PAD..][..gw], scratch);
+		self.force_w(q, j, out);
+	}
+
+	/// The 4th order's update of row `q` of the area to level `j` from `w`: `delta_y` of the rim's second application,
+	/// the outer update (the intensity stages on level `n`), the x part.
+	#[inline(always)]
+	fn outer(&self, line: &DrpLine<'_>, w: Shared, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+		let (s, gw, r) = (self.s, self.gw, q + PAD);
+		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
+		// SAFETY: the planes and `w` outlive the step. The tiling runs no unit writing `w` within 3 rows of `q` or row
+		// `q` of the field of level `j - 1` while this one runs, and no other unit touches row `q` of level `j`'s
+		// plane.
+		let (wr, u, next) =
+			unsafe { (w.get((r - 3) * s..(r + 4) * s), src.get(r * s..(r + 1) * s), dst.get_mut(r * s..(r + 1) * s)) };
+		let strip = self.delta(1, q, wr);
+		// SAFETY: this is the update of row `q` to level `j`, which the tiling runs once and alone on the row.
+		let mut stages = unsafe { self.row_stages(q, j) };
+		let alpha = self.alpha;
+		let intensity =
+			stages.as_mut().map(|(s1, s2)| Intensity { s1: &mut s1[PAD..][..gw], s2: &mut s2[PAD..][..gw], alpha });
+		let rows: Rows<'_> = std::array::from_fn(|k| &wr[k * s..][..s]);
+		line.outer(r, &u[PAD..][..gw], &rows, &mut next[PAD..][..gw], intensity);
+		self.x_part(1, q, &wr[2 * s..5 * s], strip, &mut next[PAD..][..gw], scratch);
+	}
+
+	/// The driven cells of row `q`, with their runs of table entries.
+	#[inline(always)]
+	fn driven_in(&self, q: usize) -> impl Iterator<Item = &(usize, u32, u32)> {
+		let at = (q + PAD) * self.s;
+		let first = self.driven.partition_point(|&(c, ..)| c < at);
+		self.driven[first..].iter().take_while(move |&&(c, ..)| c < at + self.s)
+	}
+
+	/// Adds `F` of sub-step `j - 1` to the driven cells of row `q` of `w` (the padded row): host.rs's `force_w` on the
+	/// row.
+	#[inline(always)]
+	fn force_w(&self, q: usize, j: usize, w: &mut [f32]) {
+		let (at, table) = ((q + PAD) * self.s, &self.tables[j - 1]);
+		for &(cell, start, len) in self.driven_in(q) {
+			let mut live_values = self.entries[start as usize..(start + len) as usize]
+				.iter()
+				.map(|&e| table[e as usize])
+				.filter(|&f| live(f));
+			let Some(first) = live_values.next() else { continue };
+			let mut v = w[cell - at] + first;
+			for f in live_values {
+				v += f;
+			}
+			w[cell - at] = v;
+		}
 	}
 
 	/// Adds `h F` of sub-step `j - 1` to the driven cells of row `q` of `next` (the padded row), and moves their
@@ -361,8 +614,7 @@ impl Step<'_> {
 	#[inline(always)]
 	fn force(&self, q: usize, j: usize, next: &mut [f32], mut stages: Option<(&mut [f32], &mut [f32])>) {
 		let (at, table, rest) = ((q + PAD) * self.s, &self.tables[j - 1], 1.0 - self.alpha);
-		let first = self.driven.partition_point(|&(c, ..)| c < at);
-		for &(cell, start, len) in self.driven[first..].iter().take_while(|&&(c, ..)| c < at + self.s) {
+		for &(cell, start, len) in self.driven_in(q) {
 			let x = cell - at;
 			let (before, h) = (next[x], centred(self.d[cell]));
 			let mut v = before;
@@ -410,5 +662,35 @@ impl Step<'_> {
 			prev[r2] = 2.0 * first - edge;
 			prev[r3] = 3.0 * first - 2.0 * edge;
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// The shrinks of kind `k` by level.
+	fn shrinks(tiling: &Tiling, k: usize) -> Vec<usize> {
+		tiling.shrink[k].clone()
+	}
+
+	#[test]
+	fn the_tilings_derive_the_documented_lags_and_shrinks() {
+		let nine = Tiling::new(4, TimeScheme::Leapfrog, false);
+		assert_eq!((nine.lag, shrinks(&nine, 0)), (1, vec![0, 1, 2, 3]), "sd(j) = j - 1");
+		let nine = Tiling::new(4, TimeScheme::Leapfrog, true);
+		assert_eq!((nine.lag, shrinks(&nine, 1)), (4, vec![2, 6, 10, 14]), "sd(j) = 4 j - 2");
+		assert_eq!(shrinks(&nine, 0), vec![0, 4, 8, 12]);
+		let drp = Tiling::new(4, TimeScheme::ModifiedEquation, false);
+		assert_eq!((drp.lag, shrinks(&drp, 0), shrinks(&drp, 1)), (6, vec![0, 6, 12, 18], vec![3, 9, 15, 21]));
+		let drp = Tiling::new(4, TimeScheme::ModifiedEquation, true);
+		assert_eq!(drp.lag, 8);
+		let offsets: Vec<usize> = drp.kinds.iter().map(|k| k.offset).collect();
+		assert_eq!(offsets, vec![6, 4, 2, 0]);
+		assert_eq!(shrinks(&drp, 0), vec![0, 8, 16, 24]);
+		assert_eq!(shrinks(&drp, 1), vec![2, 10, 18, 26]);
+		assert_eq!(shrinks(&drp, 2), vec![4, 12, 20, 28]);
+		assert_eq!(shrinks(&drp, 3), vec![6, 14, 22, 30], "sd(j) = 8 j - 2");
+		assert_eq!(drp.min_band(), 2 * 30 + 3);
 	}
 }

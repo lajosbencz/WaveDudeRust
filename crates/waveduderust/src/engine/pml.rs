@@ -344,6 +344,25 @@ impl CpuPml {
 		(tables, RimMemory { psi_y, xi_y, delta, psi_x, xi_x, z })
 	}
 
+	/// Both applications' tables and memory variables at once ([`row_wise`](Self::row_wise)), for an engine that
+	/// interleaves their rows. z~ is filled and read within one call of [`RimTables::x_line`], so the two share it:
+	/// the second's `z` is empty and its rows take the first's.
+	pub fn row_wise_pair(&mut self) -> (RimTables<'_>, [RimMemory<'_>; 2]) {
+		let Self { strips, stride, x, y, axis, cross, psi, xi, z, zeros } = self;
+		let (x_len, len) = (strips.x_len(), strips.len());
+		let tables = RimTables { strips: *strips, stride: *stride, x, y, axis: *axis, cross: *cross, zeros };
+		let [p0, p1] = psi.each_mut();
+		let [x0, x1] = xi.each_mut();
+		let mut z = Some(z.as_mut_slice());
+		let memory = [(p0, x0), (p1, x1)].map(|(psi, xi)| {
+			let (psi_x, psi_y) = psi.split_at_mut(x_len);
+			let (xi_x, rest) = xi.split_at_mut(x_len);
+			let (xi_y, delta) = rest.split_at_mut(len - x_len);
+			RimMemory { psi_y, xi_y, delta, psi_x, xi_x, z: z.take().unwrap_or_default() }
+		});
+		(tables, memory)
+	}
+
 	fn z_width(rim: usize) -> usize {
 		2 * (rim + 6)
 	}
