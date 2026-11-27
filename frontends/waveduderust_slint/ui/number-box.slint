@@ -157,6 +157,7 @@ export component NumberBox inherits FocusScope {
         }
         HorizontalLayout {
             edit := LineEdit {
+                accessible-role: none;
                 // the std line edit asks for more, which the spin column then overlaps
                 min-width: 24px;
                 enabled: root.enabled;
