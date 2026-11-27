@@ -1,6 +1,6 @@
 # Single source of the checks: .github/workflows/{ci,hygiene}.yml call these recipes.
 # Tools: `just tools`; cargo-nextest, cargo-hack, cargo-shear, cargo-deny, typos, ast-grep, zizmor, cargo-public-api,
-# a nightly toolchain (rustdoc JSON), dx; actionlint and shellcheck from their releases or the system.
+# a nightly toolchain (rustdoc JSON); actionlint and shellcheck from their releases or the system.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
