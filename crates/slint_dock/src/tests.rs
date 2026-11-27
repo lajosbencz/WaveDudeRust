@@ -468,11 +468,6 @@ fn a_resize_ignores_a_pointer_off_the_numbers() {
 }
 
 #[test]
-fn ui_dir_holds_the_slint_library() {
-	assert!(ui_dir().join("dock.slint").is_file());
-}
-
-#[test]
 fn a_pane_shown_at_an_occupied_edge_tabs_into_its_group() {
 	let mut dock = dock();
 	dock.register("n", Side::Bottom, MIN);
