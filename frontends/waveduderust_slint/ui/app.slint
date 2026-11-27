@@ -183,18 +183,14 @@ export component AppWindow inherits Window {
     property <keys> no-keys;
     // the recent file at an index of `recent-files`
     callback open-recent(int);
-    // The main area takes the keys back once the last overlay closed.
-    function overlays-closed() {
-        if (!self.welcome-shown && !self.examples-shown && !self.settings-shown && !self.export-shown
-            && self.modal.message == Message.none) {
+    property <bool> overlay-open: root.welcome-shown || root.examples-shown || root.settings-shown || root.export-shown
+        || root.about-shown || root.memory-warning-shown || root.modal.message != Message.none;
+    // the main area takes the keys back once the last overlay closed
+    changed overlay-open => {
+        if (!self.overlay-open) {
             keys.focus();
         }
     }
-    changed welcome-shown => { self.overlays-closed(); }
-    changed examples-shown => { self.overlays-closed(); }
-    changed settings-shown => { self.overlays-closed(); }
-    changed export-shown => { self.overlays-closed(); }
-    changed modal => { self.overlays-closed(); }
 
     title: "WaveDude Rust - " + (root.title-full-path && root.file-path != "" ? root.file-path : root.file-name != "" ? root.file-name : @tr("Untitled")) + (root.dirty ? "*" : "");
     icon: @image-url("../assets/icon.svg");
