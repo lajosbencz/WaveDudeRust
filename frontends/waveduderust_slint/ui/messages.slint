@@ -1,7 +1,7 @@
-import { ListView, LineEdit, Button } from "std-widgets.slint";
+import { ListView, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { EditKeys } from "edit-keys.slint";
+import { EditKeys, EditLine } from "edit-keys.slint";
 
 export enum LogLevel { trace, debug, info, warn, error }
 
@@ -99,8 +99,7 @@ export component Messages inherits Rectangle {
                 tip: @tr("Show or hide this level");
                 toggled => { root.toggle(l.level); }
             }
-            LineEdit {
-                changed has-focus => { EditKeys.local = self.has-focus; }
+            EditLine {
                 placeholder-text: @tr("Search");
                 edited(t) => { root.search(t); }
             }

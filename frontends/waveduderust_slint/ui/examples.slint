@@ -1,6 +1,6 @@
-import { LineEdit, Button, ListView } from "std-widgets.slint";
+import { Button, ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { EditKeys } from "edit-keys.slint";
+import { EditLine } from "edit-keys.slint";
 import { Overlay } from "overlay.slint";
 
 // The examples' topics, in tab order.
@@ -83,8 +83,7 @@ export component ExamplesLayer inherits Overlay {
                     }
                 }
             }
-            LineEdit {
-                changed has-focus => { EditKeys.local = self.has-focus; }
+            EditLine {
                 placeholder-text: @tr("Search");
                 edited(t) => { root.search(t); root.current = 0; }
             }

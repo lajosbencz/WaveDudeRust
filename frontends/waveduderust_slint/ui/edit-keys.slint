@@ -1,4 +1,11 @@
+import { LineEdit } from "std-widgets.slint";
+
 // The focused element takes the Edit keys itself (a text box, the Messages list): the Edit menu then binds none.
 export global EditKeys {
     in-out property <bool> local;
+}
+
+// A line edit that takes the Edit keys while focused.
+export component EditLine inherits LineEdit {
+    changed has-focus => { EditKeys.local = self.has-focus; }
 }

@@ -1,10 +1,10 @@
 // The export dialog (docs/ui/70, Export Save dialog; port: in-window, a path box with "..." for the platform dialog;
 // in the browser file names alone, decision 0025).
 
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Choice, Check } from "form.slint";
-import { EditKeys } from "edit-keys.slint";
+import { EditLine } from "edit-keys.slint";
 import { Overlay } from "overlay.slint";
 
 // Why the browser cannot start the export.
@@ -84,8 +84,7 @@ export component ExportLayer inherits Overlay {
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("File"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
-                path := LineEdit {
-                    changed has-focus => { EditKeys.local = self.has-focus; }
+                path := EditLine {
                     text <=> root.data.path;
                     edited => { root.path-edited(); }
                     key-pressed(e) => {
@@ -109,8 +108,7 @@ export component ExportLayer inherits Overlay {
             if root.data.several && root.data.archive: HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("Archive"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
-                LineEdit {
-                    changed has-focus => { EditKeys.local = self.has-focus; }
+                EditLine {
                     text <=> root.data.archive-path;
                     key-pressed(e) => {
                         if (e.text == Key.Escape) { root.shown = false; return accept; }

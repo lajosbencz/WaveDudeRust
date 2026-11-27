@@ -1,10 +1,10 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { NumberSpec } from "number-box.slint";
 import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 import { PreviewQuality } from "commands.slint";
 import { RamBar, RamBarView } from "ram-bar.slint";
-import { EditKeys } from "edit-keys.slint";
+import { EditLine } from "edit-keys.slint";
 import { Overlay } from "overlay.slint";
 
 export enum ColorTheme { system, light, dark }
@@ -124,8 +124,7 @@ export component SettingsLayer inherits Overlay {
                     width: 180px;
                     alignment: start;
                     spacing: 6px;
-                    search := LineEdit {
-                        changed has-focus => { EditKeys.local = self.has-focus; }
+                    search := EditLine {
                         placeholder-text: @tr("Search settings");
                         text <=> root.query;
                         key-pressed(e) => {

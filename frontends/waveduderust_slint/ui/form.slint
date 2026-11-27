@@ -1,9 +1,9 @@
-import { Button, CheckBox, ComboBox, LineEdit } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox } from "std-widgets.slint";
 import { Icon, IconButton } from "icons.slint";
 import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
-import { EditKeys } from "edit-keys.slint";
+import { EditKeys, EditLine } from "edit-keys.slint";
 
 // Whether the current scheme is among the user's; hidden: not a scheme, or no store to keep them.
 export enum Mine { hidden, no, yes }
@@ -367,8 +367,7 @@ export component FormText inherits Rectangle {
     min-height: max(Theme.row-height, edit.min-height);
     min-width: edit.min-width;
     preferred-width: edit.preferred-width;
-    edit := LineEdit {
-        changed has-focus => { EditKeys.local = self.has-focus; }
+    edit := EditLine {
         width: parent.width;
         height: parent.height;
         enabled: root.enabled;
