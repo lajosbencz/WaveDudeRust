@@ -22,10 +22,10 @@ pub mod rng;
 #[path = "rng.rs"]
 pub(crate) mod rng;
 
-#[cfg(feature = "unstable-engine")]
+#[cfg(feature = "unstable-sync")]
 #[path = "sync.rs"]
 pub mod sync;
-#[cfg(not(feature = "unstable-engine"))]
+#[cfg(not(feature = "unstable-sync"))]
 #[path = "sync.rs"]
 pub(crate) mod sync;
 

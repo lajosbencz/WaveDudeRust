@@ -13,7 +13,7 @@ readme = "README.md"
 documentation = "https://docs.rs/waveduderust"
 
 [package.metadata.docs.rs]
-features = ["serde", "clap", "unstable-engine", "unstable-scene", "unstable-run", "unstable-export", "unstable-view", "unstable-reflect"]
+features = ["serde", "clap", "unstable-engine", "unstable-sync", "unstable-scene", "unstable-run", "unstable-export", "unstable-view", "unstable-reflect"]
 
 [features]
 default = ["gpu", "run", "export", "mp4"]
@@ -37,7 +37,8 @@ openh264-source = ["mp4", "openh264/source"]
 clap = ["export", "dep:clap"]
 # The internals under `waveduderust::unstable`, for first-party frontends: they may break in any release and the
 # API diff skips them.
-unstable-engine = []
+unstable-engine = ["unstable-sync"]
+unstable-sync = []
 unstable-scene = []
 unstable-run = ["run"]
 unstable-export = ["export", "unstable-engine", "unstable-run", "unstable-view"]
