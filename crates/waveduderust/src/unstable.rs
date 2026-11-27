@@ -1,5 +1,7 @@
 //! The library's internals for first-party frontends: they may break in any release and the API diff skips them.
-//! Each module is public with its `unstable-<area>` feature and crate-private without it.
+//! Each module is public with its `unstable-<area>` feature and crate-private without it. Unstable parts of a stable
+//! module stay in it, public with their feature: `run`'s store, warning and worker and `Run::store` (`unstable-run`),
+//! `model::fields` (`unstable-reflect`).
 
 #[cfg(feature = "unstable-engine")]
 #[path = "engine/mod.rs"]
