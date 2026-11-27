@@ -258,6 +258,7 @@ export component Check inherits Rectangle {
         x: 0;
         height: parent.height;
         text: root.text;
+        accessible-description: root.tip;
         enabled: root.enabled;
         checked <=> root.checked;
         toggled => { root.committed(); }
@@ -392,6 +393,7 @@ export component FormNotes inherits Rectangle {
         content-height: max(self.height, edit.preferred-height);
         edit := TextInput {
             changed has-focus => { EditKeys.local = self.has-focus; }
+            accessible-label: root.tip;
             x: 4px;
             y: 2px;
             width: view.width - 8px;

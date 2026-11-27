@@ -94,6 +94,13 @@ export component NumberBox inherits FocusScope {
 
     changed value => { edit.text = root.value; }
     changed token => { edit.text = root.value; }
+    accessible-role: spinbox;
+    accessible-label: root.tip;
+    accessible-value: edit.text;
+    accessible-enabled: root.enabled;
+    accessible-action-increment => { root.step(1); }
+    accessible-action-decrement => { root.step(-1); }
+    accessible-action-set-value(text) => { root.write(text); }
     function write(text: string) {
         edit.text = text;
         root.commit();

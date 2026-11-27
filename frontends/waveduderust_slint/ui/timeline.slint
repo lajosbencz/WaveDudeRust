@@ -49,6 +49,15 @@ export global Playback {
 export component Timeline inherits Rectangle {
     property <Transport> t: Playback.transport;
     opacity: t.empty ? 0.5 : 1;
+    accessible-role: slider;
+    accessible-label: @tr("Timeline");
+    accessible-enabled: !t.empty;
+    accessible-value: t.position;
+    accessible-value-minimum: 0;
+    accessible-value-maximum: root.last;
+    accessible-value-step: 1;
+    accessible-action-increment => { Playback.seek(t.position + 1); }
+    accessible-action-decrement => { Playback.seek(t.position - 1); }
 
     property <float> last: max(1, t.frames - 1);
     // inside the outline: 5 px to its first column, one to its last
@@ -289,6 +298,7 @@ export component TransportBar inherits Rectangle {
                 padding-left: 4px;
                 speed-box := TextInput {
                     text: "1";
+                    accessible-label: @tr("Playback speed");
                     vertical-alignment: center;
                     color: Theme.text;
                     single-line: true;

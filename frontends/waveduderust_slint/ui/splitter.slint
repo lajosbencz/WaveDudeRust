@@ -41,6 +41,12 @@ export component Splitter inherits Rectangle {
         root.before = 1;
         root.after = 1;
     }
+    accessible-role: slider;
+    accessible-orientation: root.rows ? Orientation.vertical : Orientation.horizontal;
+    accessible-label: root.tip;
+    accessible-value: round(root.before / max(root.before + root.after, 0.001) * 100) + "%";
+    accessible-action-increment => { root.place((root.rows ? root.y : root.x) - root.start + 10px); }
+    accessible-action-decrement => { root.place((root.rows ? root.y : root.x) - root.start - 10px); }
     keys := FocusScope {
         enabled: root.keyed;
         key-pressed(e) => {

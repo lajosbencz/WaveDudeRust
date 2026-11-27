@@ -3287,3 +3287,9 @@ msgstr "Huygens Optics auf YouTube"
 
 msgid "Simulates the 2D wave equation: field and intensity views, scenes from images and optical parts, point and composite sources, probes with live graphs, video export. Opens and saves WaveDude Next's project files."
 msgstr "Simuliert die 2D-Wellengleichung: Feld- und Intensitätsansicht, Szenen aus Bildern und optischen Teilen, Punkt- und zusammengesetzte Quellen, Sonden mit Live-Graphen, Videoexport. Öffnet und speichert die Projektdateien von WaveDude Next."
+
+msgid "Timeline"
+msgstr "Zeitleiste"
+
+msgid "Playback speed"
+msgstr "Wiedergabegeschwindigkeit"

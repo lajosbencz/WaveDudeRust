@@ -15,7 +15,10 @@ export struct AboutData {
 // A link: its text in the accent colour, the address opened on a click.
 component Link inherits Text {
     in property <string> url;
-    callback open(string);
+    callback open(url: string);
+    accessible-role: button;
+    accessible-description: root.url;
+    accessible-action-default => { root.open(root.url); }
     color: area.has-hover ? Theme.text : Theme.accent;
     area := TouchArea {
         mouse-cursor: pointer;

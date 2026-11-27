@@ -28,6 +28,12 @@ component Toggle inherits Rectangle {
     in property <bool> on;
     in property <string> tip;
     callback toggled();
+    accessible-role: checkbox;
+    accessible-checkable: true;
+    accessible-checked: root.on;
+    accessible-label: root.text;
+    accessible-description: root.tip;
+    accessible-action-default => { root.toggled(); }
     width: label.preferred-width + 10px;
     background: root.on ? Theme.button-background : area.has-hover ? Theme.button-hover : transparent;
     border-width: 1px;
