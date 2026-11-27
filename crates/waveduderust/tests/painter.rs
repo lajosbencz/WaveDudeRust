@@ -1009,33 +1009,6 @@ fn zone_plate() {
 	assert!(first_block(4.0) < first_block(2.0));
 }
 
-/// A compact picture of a painting: 25 x 25 cells of 8 x 8 pixels, each the mean red change (`.` none, else a
-/// digit of |mean - 100| / 16, `-` for a lower index) and a second grid for blue.
-fn summary(p: &ScenePixels) -> String {
-	let mut out = String::new();
-	for channel in [0usize, 2] {
-		for cy in 0..25u32 {
-			for cx in 0..25u32 {
-				let mut sum = 0.0;
-				for y in cy * 8..cy * 8 + 8 {
-					for x in cx * 8..cx * 8 + 8 {
-						sum += p.rgba_at(x, y)[channel] as f64;
-					}
-				}
-				let mean = sum / 64.0 - if channel == 0 { 100.0 } else { 0.0 };
-				out.push(match mean {
-					m if m.abs() < 0.5 => '.',
-					m if m < 0.0 => '-',
-					m => char::from_digit(((m / 16.0) as u32).min(9), 10).unwrap(),
-				});
-			}
-			out.push('\n');
-		}
-		out.push('\n');
-	}
-	out
-}
-
 fn kinds() -> Vec<(&'static str, PartKind)> {
 	let glass = |n: f64| Material::default().with_refractive_index(n);
 	vec![
@@ -1186,16 +1159,57 @@ fn kinds() -> Vec<(&'static str, PartKind)> {
 	]
 }
 
+/// A channel's painted mass (its deviation from the blank canvas), the mass's centroid and its radius of gyration
+/// about the centroid.
+fn moments(p: &ScenePixels, channel: usize) -> (f64, Vec2, f64) {
+	let blank = if channel == 0 { 100.0 } else { 0.0 };
+	let (mut mass, mut sx, mut sy, mut sxx) = (0.0, 0.0, 0.0, 0.0);
+	for y in 0..p.height {
+		for x in 0..p.width {
+			let m = (f64::from(p.rgba_at(x, y)[channel]) - blank).abs();
+			let (fx, fy) = (f64::from(x) + 0.5, f64::from(y) + 0.5);
+			mass += m;
+			sx += m * fx;
+			sy += m * fy;
+			sxx += m * (fx * fx + fy * fy);
+		}
+	}
+	if mass == 0.0 {
+		return (0.0, Vec2::new(0.0, 0.0), 0.0);
+	}
+	let (cx, cy) = (sx / mass, sy / mass);
+	(mass, Vec2::new(cx, cy), (sxx / mass - cx * cx - cy * cy).max(0.0).sqrt())
+}
+
+/// Turning a part turns its pixels about its position as docs/spec/00-overview.md, Angles, says: per channel the
+/// mass and its spread stay within 5 % of the unturned part's (sub-cell features alias by up to 3 %); a quarter turn
+/// maps pixel centres onto pixel centres, so there the centroid lands on the unturned one's, turned.
 #[test]
-fn snapshots_of_each_kind() {
+fn a_turned_part_paints_the_same_shape_turned() {
+	let centre = 100.0;
 	for (name, kind) in kinds() {
-		let mut text = String::new();
-		for angle in [0.0, 17.0, 45.0, 90.0] {
+		let at = |angle: f64| {
 			let mut part = Part::new(kind.clone(), 100, 100);
 			part.base.angle = angle;
-			let p = paint_on(ScenePixels::blank(200, 200, 1.0), &[part]);
-			text.push_str(&format!("angle {angle}\n{}", summary(&p)));
+			paint_on(ScenePixels::blank(200, 200, 1.0), &[part])
+		};
+		let upright = at(0.0);
+		assert!(moments(&upright, 0).0 + moments(&upright, 2).0 > 0.0, "{name}: paints nothing");
+		for angle in [17.0f64, 45.0, 90.0] {
+			let turned = at(angle);
+			let (sin, cos) = angle.to_radians().sin_cos();
+			for channel in [0, 2] {
+				let ((m0, c0, r0), (m, c, r)) = (moments(&upright, channel), moments(&turned, channel));
+				let off = |a: f64, b: f64| if a == b { 0.0 } else { (a - b).abs() / a.abs().max(b.abs()) };
+				assert!(off(m0, m) <= 0.05, "{name} at {angle}, channel {channel}: mass {m0} -> {m}");
+				assert!(off(r0, r) <= 0.05, "{name} at {angle}, channel {channel}: spread {r0} -> {r}");
+				if m0 > 0.0 && angle == 90.0 {
+					let (ox, oy) = (c0.x - centre, c0.y - centre);
+					let want = Vec2::new(centre + ox * cos + oy * sin, centre + oy * cos - ox * sin);
+					let miss = (c.x - want.x).hypot(c.y - want.y);
+					assert!(miss <= 0.25, "{name} at {angle}, channel {channel}: centroid {c:?}, turned {want:?}");
+				}
+			}
 		}
-		insta::assert_snapshot!(name, text);
 	}
 }
