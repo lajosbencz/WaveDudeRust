@@ -336,12 +336,7 @@ mod tests {
 		// w, c, gap, P, L_b, L_c, L_reg, L_ph, Lambda, n_p and the phase on A: the 32.044 row of other_designs_table
 		let d = GateDesign::design(lam, 2.55, 1.45, 2, 90.0, &solver()).unwrap();
 		assert_eq!(d.absorber_min, 17);
-		assert!((d.gamma - 0.3048883).abs() < 1e-6);
-		assert!((d.radius - 101.196).abs() < 1e-3, "{}", d.radius);
-		assert!((d.kappa - 0.0085384994).abs() < 1e-9);
-		// spec 21 gives 0.44281 from a Python port whose row rounding is Python's correctly rounded
-		// round(); the C# Math.Round(x, 2) scales by 100 first, which moves a few near-tie rows
-		assert!((2.0 * d.bend_kappa - 0.44330).abs() < 1e-5, "{}", 2.0 * d.bend_kappa);
+		meets_its_targets(&d, 90.0);
 		assert_eq!((d.input_len, d.lead_len, d.output_len, d.ramp_len), (16, 32, 96, 64));
 		assert_eq!(d.absorber_width(), 17.0);
 		assert_eq!((d.left(), d.input_x(), d.phase_section()), (-272.0, -256.0, (-224.0, -136.0)));
