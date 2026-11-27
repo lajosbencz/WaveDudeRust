@@ -42,6 +42,14 @@ pub(crate) fn wire_widgets(app: &AppWindow) {
 /// The Properties form: edits, list rows, the gradient bar, colour schemes and the scene image.
 pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	let form_ui = app.global::<ui::Form<'_>>();
+	wire_edits(state, app, &form_ui);
+	wire_gradient(state, app, &form_ui);
+	wire_scene_image(state, app, &form_ui);
+	wire_schemes(state, app, &form_ui);
+}
+
+/// Field edits, the description, the seed, list rows and the Mine toggle.
+fn wire_edits(state: &Rc<RefCell<State>>, app: &AppWindow, form_ui: &ui::Form<'_>) {
 	let h = Handle::new(state, app);
 	form_ui.on_edited(move |typing| {
 		h.show(|s, app| {
@@ -86,6 +94,12 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		move |from, to| edit(form::RowEdit::Move { from: index(from), to: index(to) })
 	});
 	form_ui.on_clear_rows(move || edit_rows(form::RowEdit::Clear));
+	let h = Handle::new(state, app);
+	form_ui.on_toggle_mine(move || h.show(|s, _| s.toggle_mine()));
+}
+
+/// The gradient bar: stop edits on the shown scheme, lookups along it and the scheme it is based on.
+fn wire_gradient(state: &Rc<RefCell<State>>, app: &AppWindow, form_ui: &ui::Form<'_>) {
 	// the gradient bar and the stop swatches: each edit on the scheme shown, the stop then selected handed back
 	let bar_edit = {
 		let (st, weak) = (state.clone(), app.as_weak());
@@ -131,10 +145,34 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			k
 		});
 	});
-	let h = Handle::new(state, app);
-	form_ui.on_load_scheme_file(move |layer| {
-		h.read(|s, app| files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer));
+	let weak = app.as_weak();
+	form_ui.on_marker_at(move |at, reach, selected| {
+		weak.upgrade().map_or(-1, |app| form::marker_at(&app.global::<ui::Form<'_>>().get_stops(), at, reach, selected))
 	});
+	let weak = app.as_weak();
+	form_ui.on_stop_beside(move |k, step| {
+		weak.upgrade().map_or(-1, |app| form::stop_beside(&app.global::<ui::Form<'_>>().get_stops(), k, step))
+	});
+	let h = Handle::new(state, app);
+	form_ui.on_base_on(move |picked| {
+		h.show(|s, app| {
+			if let (Node::Scheme(i), Some(k)) = (s.selection.current(), models::index_from_ui(picked)) {
+				let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
+				if let Some(base) = base {
+					s.doc.edit(|p| {
+						if let Some(scheme) = p.color_schemes.get_mut(i) {
+							form::base_on(scheme, &base);
+						}
+					});
+					app.global::<ui::Form<'_>>().set_based_on(picked);
+				}
+			}
+		});
+	});
+}
+
+/// The scene image: pick, save and drop.
+fn wire_scene_image(state: &Rc<RefCell<State>>, app: &AppWindow, form_ui: &ui::Form<'_>) {
 	#[cfg(not(target_arch = "wasm32"))]
 	{
 		let (st, weak) = (state.clone(), app.as_weak());
@@ -169,8 +207,14 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	}
 	let h = Handle::new(state, app);
 	form_ui.on_drop_image(move || h.show(|s, _| s.doc.edit(|p| p.scene.remove_image())));
+}
+
+/// Colour scheme files: load one, remove one of mine, copy one into the project for editing.
+fn wire_schemes(state: &Rc<RefCell<State>>, app: &AppWindow, form_ui: &ui::Form<'_>) {
 	let h = Handle::new(state, app);
-	form_ui.on_toggle_mine(move || h.show(|s, _| s.toggle_mine()));
+	form_ui.on_load_scheme_file(move |layer| {
+		h.read(|s, app| files::pick_scheme(&s.inbox, &app.global::<ui::Words<'_>>(), layer));
+	});
 	let h = Handle::new(state, app);
 	form_ui.on_remove_my_scheme(move |layer| {
 		h.with(|s, app| {
@@ -205,31 +249,6 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 			);
 			s.selection.set(Node::Scheme(at));
 			s.show(app);
-		});
-	});
-
-	let weak = app.as_weak();
-	form_ui.on_marker_at(move |at, reach, selected| {
-		weak.upgrade().map_or(-1, |app| form::marker_at(&app.global::<ui::Form<'_>>().get_stops(), at, reach, selected))
-	});
-	let weak = app.as_weak();
-	form_ui.on_stop_beside(move |k, step| {
-		weak.upgrade().map_or(-1, |app| form::stop_beside(&app.global::<ui::Form<'_>>().get_stops(), k, step))
-	});
-	let h = Handle::new(state, app);
-	form_ui.on_base_on(move |picked| {
-		h.show(|s, app| {
-			if let (Node::Scheme(i), Some(k)) = (s.selection.current(), models::index_from_ui(picked)) {
-				let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
-				if let Some(base) = base {
-					s.doc.edit(|p| {
-						if let Some(scheme) = p.color_schemes.get_mut(i) {
-							form::base_on(scheme, &base);
-						}
-					});
-					app.global::<ui::Form<'_>>().set_based_on(picked);
-				}
-			}
 		});
 	});
 }
