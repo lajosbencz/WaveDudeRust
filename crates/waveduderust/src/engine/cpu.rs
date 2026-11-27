@@ -16,6 +16,14 @@
 //! over `prev`. With a rim, the CPML corrects the rim after each pass (pml.rs).
 //!
 //! Threads: one driver thread; each pass fans out over rows on the rayon pool, reading only its input field.
+//!
+//! Damage: one rectangle of grid cells (damage.rs) outside which the field and the intensity stages are +0. A pass
+//! runs on the damage grown by its reach (the stencil's, the CPML's with a rim), its rows only and its columns within
+//! them, and so does the CPML on the rim (pml.rs, `CpuPml::apply`); a skipped cell would compute to +0, so the result
+//! is the same bit for bit. The damage then takes in the cells a source drives and the cells the pass made non-zero
+//! (any bit set), found in the band it grew by. It is empty at rest and shrinks only on a reset, so every cell ever
+//! written is recomputed while the run lasts. Any code that writes the field or the stages outside the passes and the
+//! forcing must widen the damage; debug builds check the invariant after each sub-step.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -23,9 +31,10 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use super::capture;
+use super::damage::{Damage, extent, zero_outside};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
 use super::mur::{MurChain, mur_chains};
-use super::pml::{self, CpuPml, cut, taps};
+use super::pml::{self, CpuPml, Medium, cut, taps};
 use super::shared::{Shared, blend};
 use super::stencil::{INV12, K9_AXIS, K9_DIAGONAL, PAD, StencilCoefficients, TimeScheme, centred};
 use super::substeps::sub_steps;
@@ -66,6 +75,10 @@ pub struct CpuEngine {
 	probes: Vec<(Layer, Vec<usize>)>,
 	probe_queue: ProbeQueue,
 	probe_reading: ProbeReadings,
+	/// The cells that hold a value (module docs, Damage).
+	damage: Damage,
+	/// Cells one pass reaches along an axis: the stencil's, the CPML's when there is a rim.
+	reach: usize,
 }
 
 /// The bytes [`CpuEngine`] allocates by the grid of `scene` with `options`: the field, medium and stage planes, the
@@ -116,6 +129,8 @@ impl CpuEngine {
 			probes: Vec::new(),
 			probe_queue: ProbeQueue::default(),
 			probe_reading: ProbeReadings::default(),
+			damage: Damage::NONE,
+			reach: 0,
 			shared: Shared::new(scene, options, n),
 		};
 		engine.load_scene();
@@ -135,6 +150,7 @@ impl CpuEngine {
 			self.u[at..at + gw].copy_from_slice(a);
 			self.prev[at..at + gw].copy_from_slice(b);
 		}
+		self.damage = Damage::all(gw, scene.grid_height() as usize);
 	}
 
 	/// The padded field buffer (see [`SceneData::stride`]).
@@ -210,8 +226,10 @@ impl CpuEngine {
 		self.cuts = pml::cuts(scene);
 		self.mirrors = self.cuts.iter().any(|&c| c != 0);
 		self.mur = mur_chains(scene, &self.c2, &self.d);
-		let cross = StencilCoefficients::of(self.shared.options.stencil).cross as f32;
-		self.pml = CpuPml::new(scene, n, self.axis, cross);
+		let coefficients = StencilCoefficients::of(self.shared.options.stencil);
+		self.pml = CpuPml::new(scene, n, self.axis, coefficients.cross as f32);
+		let pml = if self.pml.is_some() { pml::REACH } else { 0 };
+		self.reach = coefficients.reach().max(pml);
 		self.group_sources();
 	}
 
@@ -229,13 +247,18 @@ impl CpuEngine {
 	fn force_w(&mut self) {
 		for (cell, run) in self.groups.iter() {
 			let mut v = self.w[cell];
+			let mut driven = false;
 			for &e in run {
 				let f = self.values[e as usize];
 				if live(f) {
 					v += f;
+					driven = true;
 				}
 			}
-			self.w[cell] = v;
+			if driven {
+				self.w[cell] = v;
+				self.damage.include(cell, self.stride);
+			}
 		}
 	}
 
@@ -258,6 +281,7 @@ impl CpuEngine {
 				continue;
 			}
 			self.prev[cell] = v;
+			self.damage.include(cell, self.stride);
 			if intensity {
 				let s1 = self.s1[cell] + (v * v - before * before) * rest;
 				self.s2[cell] += (s1 - self.s1[cell]) * rest;
@@ -276,8 +300,9 @@ impl CpuEngine {
 	fn leapfrog_pass(&mut self, intensity: bool) {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, d, cuts, mirrors) = (&self.u, &self.c2, &self.d, &self.cuts, self.mirrors);
+		let (area, xs) = (&self.damage, self.damage.x.clone());
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
-		grid_rows(&mut self.prev, stages, s, gw, |r, next| {
+		grid_rows(&mut self.prev, stages, s, gw, area, |r, next| {
 			let at = r * s + PAD;
 			let (c2, d) = (&c2[at..][..gw], &d[at..][..gw]);
 			let update = |x: usize, next: &mut f32, v: f32, lap: f32| {
@@ -300,9 +325,9 @@ impl CpuEngine {
 					next[x] = v + ((v - next[x]) * d[x] + lap * c2[x] * centred(d[x]));
 				}
 			};
-			match row_cuts(cuts, mirrors, at, gw) {
-				None => uncut(0..gw, next),
-				Some(cuts) => cut_spans(cuts, |span, cut| {
+			match row_cuts(cuts, mirrors, at, gw, &xs) {
+				None => uncut(xs.clone(), next),
+				Some(cuts) => cut_spans(cuts, xs.clone(), |span, cut| {
 					if !cut {
 						return uncut(span, next);
 					}
@@ -314,14 +339,16 @@ impl CpuEngine {
 		});
 	}
 
-	/// The modified equation's first pass: `w = c2 L u` on every grid cell.
+	/// The modified equation's first pass: `w = c2 L u` on the damaged cells.
 	fn inner_pass(&mut self) {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, c2, cuts, axis, mirrors) = (&self.u, &self.c2, &self.cuts, &self.axis, self.mirrors);
-		grid_rows(&mut self.w, None, s, gw, |r, w| {
+		let (area, xs) = (&self.damage, &self.damage.x);
+		grid_rows(&mut self.w, None, s, gw, area, |r, w| {
 			let at = r * s + PAD;
 			let c2 = &c2[at..][..gw];
-			drp_row(u, at, s, gw, axis, row_cuts(cuts, mirrors, at, gw), |x, lap| w[x] = c2[x] * lap);
+			let cuts = row_cuts(cuts, mirrors, at, gw, xs);
+			drp_row(u, at, s, xs.clone(), axis, cuts, |x, lap| w[x] = c2[x] * lap);
 		});
 	}
 
@@ -331,41 +358,69 @@ impl CpuEngine {
 		let (s, gw) = (self.stride, self.shared.scene.grid_width() as usize);
 		let (u, w, c2, d, cuts, axis, mirrors) =
 			(&self.u, &self.w, &self.c2, &self.d, &self.cuts, &self.axis, self.mirrors);
+		let (area, xs) = (&self.damage, &self.damage.x);
 		let stages = Self::stages(&mut self.s1, &mut self.s2, self.alpha, intensity);
-		grid_rows(&mut self.prev, stages, s, gw, |r, next| {
+		grid_rows(&mut self.prev, stages, s, gw, area, |r, next| {
 			let at = r * s + PAD;
 			let (uc, wc, c2, d) = (&u[at..][..gw], &w[at..][..gw], &c2[at..][..gw], &d[at..][..gw]);
-			drp_row(w, at, s, gw, axis, row_cuts(cuts, mirrors, at, gw), |x, lw| {
+			drp_row(w, at, s, xs.clone(), axis, row_cuts(cuts, mirrors, at, gw, xs), |x, lw| {
 				let c = uc[x];
 				next[x] = c + ((c - next[x]) * d[x] + (wc[x] + c2[x] * lw * INV12) * centred(d[x]));
 			});
 		});
 	}
 
-	/// One sub-step; the next field ends in `u`.
+	/// The damage grown by one pass's reach: every cell the pass and the CPML after it can change.
+	fn reached(&self, damage: &Damage) -> Damage {
+		let scene = &self.shared.scene;
+		damage.grown(self.reach, scene.grid_width() as usize, scene.grid_height() as usize)
+	}
+
+	/// One sub-step; the next field ends in `u`. Each pass runs on the damage grown by its reach; the damage then
+	/// takes in what the pass and the forcing made non-zero (module docs, Damage).
 	fn sub_step(&mut self, intensity: bool) {
-		match self.shared.scheme {
+		let known = self.damage.clone();
+		let area = match self.shared.scheme {
 			TimeScheme::Leapfrog => {
+				self.damage = self.reached(&known);
 				self.leapfrog_pass(intensity);
 				if let Some(p) = &mut self.pml {
-					p.apply(0, &self.u, &self.cuts, &self.c2, &mut self.prev, 1.0);
+					p.apply(0, &self.u, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.prev, 1.0, &self.damage);
 				}
 				self.force_next(intensity);
+				std::mem::replace(&mut self.damage, known)
 			}
 			TimeScheme::ModifiedEquation => {
+				// `w` is written on the inner area, which a later sub-step's covers, as the damage only grows.
+				self.damage = self.reached(&known);
 				self.inner_pass();
 				if let Some(p) = &mut self.pml {
-					p.apply(0, &self.u, &self.cuts, &self.c2, &mut self.w, 1.0);
+					p.apply(0, &self.u, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.w, 1.0, &self.damage);
 				}
 				self.force_w();
+				let inner = std::mem::replace(&mut self.damage, known.clone());
+				let excited = extent(&self.w, self.stride, &inner, known);
+				self.damage = self.reached(&excited);
 				self.outer_pass(intensity);
 				if let Some(p) = &mut self.pml {
-					p.apply(1, &self.w, &self.cuts, &self.c2, &mut self.prev, INV12);
+					p.apply(1, &self.w, Medium { cuts: &self.cuts, c2: &self.c2 }, &mut self.prev, INV12, &self.damage);
 				}
+				std::mem::replace(&mut self.damage, excited)
 			}
-		}
+		};
+		self.damage = extent(&self.prev, self.stride, &area, self.damage.clone());
 		self.apply_open_edges();
 		std::mem::swap(&mut self.u, &mut self.prev);
+		debug_assert!(self.damage_holds(), "a cell outside the damage {:?} is not +0", self.damage);
+	}
+
+	/// Whether every grid cell outside the damage is +0 in the field, `w` and the intensity stages.
+	fn damage_holds(&self) -> bool {
+		let (gw, gh) = (self.shared.scene.grid_width() as usize, self.shared.scene.grid_height() as usize);
+		[&self.u, &self.prev, &self.w, &self.s1, &self.s2]
+			.into_iter()
+			.filter(|b| !b.is_empty())
+			.all(|b| zero_outside(b, self.stride, gw, gh, &self.damage))
 	}
 
 	/// Mur's condition on the first ring (mur.rs, `mur_weights`); the second and third rings, which only the DRP stencil
@@ -398,28 +453,33 @@ struct Stages<'a> {
 	alpha: f32,
 }
 
-/// Runs `row(r, cells)` on the `gw` grid cells of every grid row `r` of `out` (padded rows of `s`) in
-/// parallel, then advances the intensity stages of those cells by the values written, if given.
-fn grid_rows(out: &mut [f32], stages: Option<Stages<'_>>, s: usize, gw: usize, row: impl Fn(usize, &mut [f32]) + Sync) {
-	let rows = out.len() / s;
-	let grid = |r: usize| (PAD..rows - PAD).contains(&r);
+/// Runs `row(r, cells)` on the `gw` grid cells of every padded row `r` of `out` (rows of `s`) that `area`
+/// covers, in parallel; `row` writes `area`'s columns. Then advances the intensity stages of those cells by
+/// the values written, if given.
+fn grid_rows(
+	out: &mut [f32],
+	stages: Option<Stages<'_>>,
+	s: usize,
+	gw: usize,
+	area: &Damage,
+	row: impl Fn(usize, &mut [f32]) + Sync,
+) {
+	if area.is_empty() {
+		return;
+	}
+	let (first, rows) = (PAD + area.y.start, (PAD + area.y.start) * s..(PAD + area.y.end) * s);
+	let xs = PAD + area.x.start..PAD + area.x.end;
 	match stages {
-		Some(Stages { s1, s2, alpha }) => out
+		Some(Stages { s1, s2, alpha }) => out[rows.clone()]
 			.par_chunks_mut(s)
-			.zip(s1.par_chunks_mut(s))
-			.zip(s2.par_chunks_mut(s))
+			.zip(s1[rows.clone()].par_chunks_mut(s))
+			.zip(s2[rows].par_chunks_mut(s))
 			.enumerate()
-			.filter(|(r, _)| grid(*r))
-			.for_each(|(r, ((line, s1), s2))| {
-				let cells = &mut line[PAD..][..gw];
-				row(r, cells);
-				accumulate(&mut s1[PAD..][..gw], &mut s2[PAD..][..gw], cells, alpha);
+			.for_each(|(k, ((line, s1), s2))| {
+				row(first + k, &mut line[PAD..][..gw]);
+				accumulate(&mut s1[xs.clone()], &mut s2[xs.clone()], &line[xs.clone()], alpha);
 			}),
-		None => out
-			.par_chunks_mut(s)
-			.enumerate()
-			.filter(|(r, _)| grid(*r))
-			.for_each(|(r, line)| row(r, &mut line[PAD..][..gw])),
+		None => out[rows].par_chunks_mut(s).enumerate().for_each(|(k, line)| row(first + k, &mut line[PAD..][..gw])),
 	}
 }
 
@@ -448,43 +508,43 @@ fn drp(u: &[f32], i: usize, s: usize, a: &[f32; 4], cut: u8) -> f32 {
 	a[1] * ring(1) + a[2] * ring(2) + a[3] * ring(3)
 }
 
-/// The cut bytes of the `gw` grid cells from padded cell `at`, or None when the row has no mirror.
+/// The cut bytes of the `gw` grid cells from padded cell `at`, or None when the cells `xs` of the row have no mirror.
 #[inline]
-fn row_cuts(cuts: &[u8], mirrors: bool, at: usize, gw: usize) -> Option<&[u8]> {
+fn row_cuts<'a>(cuts: &'a [u8], mirrors: bool, at: usize, gw: usize, xs: &Range<usize>) -> Option<&'a [u8]> {
 	if !mirrors {
 		return None;
 	}
 	let row = &cuts[at..][..gw];
-	row.iter().any(|&c| c != 0).then_some(row)
+	row[xs.clone()].iter().any(|&c| c != 0).then_some(row)
 }
 
-/// Hands `f` the maximal runs of `cuts` in order, each with whether its cells drop a tap (a non-zero cut byte).
-/// A row crossed by a mirror has only a few cut cells near it; the runs between take the row-slice loops.
+/// Hands `f` the maximal runs of `cuts` within `xs` in order, each with whether its cells drop a tap (a non-zero
+/// cut byte). A row crossed by a mirror has only a few cut cells near it; the runs between take the row-slice loops.
 #[inline(always)]
-fn cut_spans(cuts: &[u8], mut f: impl FnMut(Range<usize>, bool)) {
-	let mut start = 0;
-	while start < cuts.len() {
+fn cut_spans(cuts: &[u8], xs: Range<usize>, mut f: impl FnMut(Range<usize>, bool)) {
+	let mut start = xs.start;
+	while start < xs.end {
 		let cut = cuts[start] != 0;
-		let len = cuts[start..].iter().position(|&c| (c != 0) != cut).unwrap_or(cuts.len() - start);
+		let len = cuts[start..xs.end].iter().position(|&c| (c != 0) != cut).unwrap_or(xs.end - start);
 		f(start..start + len, cut);
 		start += len;
 	}
 }
 
-/// The DRP Laplacian of the `gw` grid cells from padded cell `at`, handed to `f` with the cell's
+/// The DRP Laplacian of the grid cells `xs` of the row from padded cell `at`, handed to `f` with the cell's
 /// offset in the row. Cells without a cut run on row slices ([`drp_span`]), the cut ones through [`drp`].
 #[inline(always)]
 fn drp_row(
 	u: &[f32],
 	at: usize,
 	s: usize,
-	gw: usize,
+	xs: Range<usize>,
 	a: &[f32; 4],
 	cuts: Option<&[u8]>,
 	mut f: impl FnMut(usize, f32),
 ) {
-	let Some(cuts) = cuts else { return drp_span(u, at, s, 0..gw, a, &mut f) };
-	cut_spans(cuts, |span, cut| {
+	let Some(cuts) = cuts else { return drp_span(u, at, s, xs, a, &mut f) };
+	cut_spans(cuts, xs, |span, cut| {
 		if !cut {
 			return drp_span(u, at, s, span, a, &mut f);
 		}
@@ -549,6 +609,7 @@ impl WaveEngine for CpuEngine {
 		for b in [&mut self.u, &mut self.prev, &mut self.w, &mut self.s1, &mut self.s2] {
 			b.fill(0.0);
 		}
+		self.damage = Damage::NONE;
 		if let Some(p) = &mut self.pml {
 			p.reset();
 		}
@@ -632,6 +693,7 @@ impl WaveEngine for CpuEngine {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::engine::types::ImageSource;
 	use crate::model::{Edges, PulseShape, Scene, Stencil};
 
 	fn options(stencil: Stencil) -> EngineOptions {
@@ -849,13 +911,67 @@ mod tests {
 		assert_eq!(e.alpha, (-1.0f64 / 10.0).exp() as f32, "level 0 is not a source level");
 	}
 
+	/// Every buffer the step writes, as bits.
+	fn state(e: &CpuEngine) -> Vec<u32> {
+		[&e.u, &e.prev, &e.w, &e.s1, &e.s2].into_iter().flatten().map(|v| v.to_bits()).collect()
+	}
+
+	#[test]
+	fn the_damage_skips_only_cells_that_stay_zero() {
+		for stencil in [Stencil::NinePoint, Stencil::FourthOrder] {
+			for (edges, rim) in [(Edges::Open, 0), (Edges::Reflective, 0), (Edges::Open, -6)] {
+				let mut scene = SceneData::blank(60, 44, &Scene { damping_edge: rim, edges, ..Scene::default() });
+				let gw = scene.grid_width() as usize;
+				let r = scene.rim as usize;
+				for gy in r + 20..r + 26 {
+					scene.c2[gy * gw + r + 38] = 0.0;
+				}
+				scene.image_sources.push(ImageSource { gx: (r + 50) as u32, gy: (r + 40) as u32, level: 40 });
+				let mut damaged = CpuEngine::new(scene.clone(), options(stencil));
+				let mut whole = CpuEngine::new(scene, options(stencil));
+				for e in [&mut damaged, &mut whole] {
+					e.set_emitters(&[emitter(30, 22), emitter(30, 41)]);
+				}
+				let cells = gw * whole.shared.scene.grid_height() as usize;
+				whole.set_field(&vec![0.0; cells], &vec![0.0; cells]);
+				damaged.advance_one_step();
+				whole.advance_one_step();
+				let all = Damage::all(gw, cells / gw);
+				assert!(damaged.damage != all, "{stencil:?} {edges:?} {rim}: nothing skipped");
+				for step in 1..150 {
+					damaged.advance_one_step();
+					whole.advance_one_step();
+					assert!(state(&damaged) == state(&whole), "{stencil:?} {edges:?} {rim}: step {step}");
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn an_idle_scene_has_no_damage_and_a_reset_clears_it() {
+		let mut e = CpuEngine::new(SceneData::blank(40, 30, &Scene::default()), options(Stencil::FourthOrder));
+		for _ in 0..5 {
+			e.advance_one_step();
+		}
+		assert_eq!(e.damage, Damage::NONE);
+		e.set_emitters(&[emitter(20, 15)]);
+		e.advance_one_step();
+		assert!(!e.damage.is_empty());
+		e.reset();
+		assert_eq!(e.damage, Damage::NONE);
+	}
+
 	#[test]
 	fn cut_spans_cover_the_row_in_maximal_runs() {
 		let mut runs = Vec::new();
-		cut_spans(&[0, 0, 3, 1, 0, 0, 0, 8], |span, cut| runs.push((span, cut)));
+		let cuts = [0, 0, 3, 1, 0, 0, 0, 8];
+		cut_spans(&cuts, 0..8, |span, cut| runs.push((span, cut)));
 		assert_eq!(runs, [(0..2, false), (2..4, true), (4..7, false), (7..8, true)]);
 		runs.clear();
-		cut_spans(&[0; 5], |span, cut| runs.push((span, cut)));
+		cut_spans(&cuts, 3..6, |span, cut| runs.push((span, cut)));
+		assert_eq!(runs, [(3..4, true), (4..6, false)]);
+		runs.clear();
+		cut_spans(&[0; 5], 0..5, |span, cut| runs.push((span, cut)));
 		assert_eq!(runs, [(0..5, false)]);
 	}
 
@@ -868,7 +984,7 @@ mod tests {
 		(cuts[3], cuts[4], cuts[10]) = (0b0001_0010, 0b1000_0000, 0b0000_0101);
 		let a = [0.0, 1.3, -0.17, 0.021];
 		let mut got = vec![f32::NAN; gw];
-		drp_row(&u, at, s, gw, &a, Some(&cuts), |x, v| got[x] = v);
+		drp_row(&u, at, s, 0..gw, &a, Some(&cuts), |x, v| got[x] = v);
 		let want: Vec<f32> = (0..gw).map(|x| drp(&u, at + x, s, &a, cuts[x])).collect();
 		assert_eq!(
 			got.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),

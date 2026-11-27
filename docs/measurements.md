@@ -235,6 +235,42 @@ branch merged on it, alternated, two runs each: 2.64 to 2.67 / 2.65 to 2.66 ms a
 0.79 to 0.83 on 8. The gain does not show on this host's native build. Example01 (4th order), `probes --steps 300`:
 5.6 / 2.1 s on 1 thread, 0.97 / 0.47 s on 8; the probe series byte for byte the same.
 
+## The CPU engine's damage rectangle
+
+The CPU passes and the CPML run only the rectangle of cells the wave has reached
+([`docs/spec/30-engine.md`](spec/30-engine.md), Step). 2026-11-25, the VirtualBox guest above (8 vCPUs),
+`RAYON_NUM_THREADS=8 waveduderust-cli bench --steps <n> --captures-every 0 --rim 32`, a 1920x1080 canvas with one
+source at the centre, ms a step. Master (e6ceae4) against the branch, alternated: first with the passes alone
+restricted (the CPML still over the whole rim), then with the CPML restricted too, each against its own master runs:
+
+| Steps timed, stencil | Master | Passes restricted | Master | Passes and CPML restricted |
+|---|---|---|---|---|
+| 200 (two runs), 9-point | 8.8 to 11.1 | 3.0 to 3.9 | 8.7 to 9.8 | 1.08 to 1.09 |
+| 200 (two runs), 4th order | 16.4 to 20.6 | 6.7 to 7.6 | 14.1 to 15.1 | 2.4 to 2.8 |
+| 2000 (one run), 9-point | 9.6 | 8.2 | 8.4 | 6.8 |
+| 2000 (one run), 4th order | 18.1 | 16.7 | 14.9 | 12.4 |
+
+By about step 1000 the wave fills the grid and every row runs again; the 2000-step figures average over both halves.
+Growing the damage by the passes' reach alone (16 cells a step for the 4th order with a rim) filled the grid by step
+220 and gained nothing in the first row. The probe series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`,
+300 steps, are byte for byte the same as master's.
+
+At 90 % damage and above the restriction costs at most 1 %. A harness outside the repository links master's library
+(its version renamed) and the branch's into one binary and steps both on the same scene in alternating blocks of 25
+steps, so the host's noise falls on both alike; separate processes on this guest differed by more than 1 % between
+runs of the same binary. The scenes: a source at the centre, the open grid (the damage the whole grid) or a mirror
+box on the canvas's border (the damage 92 % of the grid), timed after the wave fills them; the fields of the two
+engines stay equal bit for bit. Branch over master, total time, two runs:
+
+| Scene | 1 thread (`taskset -c 3`), 800x600, rim 16, 2000 steps | 8 threads, 1920x1080, rim 32, 1000 steps |
+|---|---|---|
+| 9-point, box | 0.894, 0.878 | 0.905, 0.940 |
+| 9-point, open | 1.001, 1.008 | 1.069, 0.940 (median blocks 0.971, 0.992) |
+| 4th order, box | 0.900, 0.904 | 0.995, 0.906 |
+| 4th order, open | 0.988, 0.998 | 1.001, 0.967 |
+
+On 8 threads single blocks vary by more than the difference; the 1.069 is one such run, its median block 0.971.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at

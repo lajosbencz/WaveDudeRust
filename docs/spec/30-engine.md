@@ -83,6 +83,19 @@ for k in 0..subSteps-1:
 time += 1
 ```
 
+Rust, CPU engine: the passes skip the cells that stay 0. One rectangle of grid cells, the damage, bounds every cell
+of the field and the intensity stages that is not +0. It is empty at rest and after a reset, and the whole grid
+after a field is set. A pass runs on the damage grown on every side by the cells the pass reaches: the stencil's
+reach (1 for the 9-point stencil, 3 for the 4th order), and 4 with a rim, the CPML's reach (`engine::pml::REACH`).
+It runs only the rows inside, and only its columns within those rows. The CPML after it does the same on the rim:
+the top and bottom strips on the area's rows and columns, and the left and right strips on its rows, only where the
+area meets them. Afterwards the damage takes in the cells a source drove and the cells the pass left not +0 (any bit
+set, no threshold), found by reading only the band it grew by. So it follows the excited medium, about the wave's
+speed, rather than the stencil's reach of up to 16 cells a step. It never shrinks before a reset, so every cell once
+written is recomputed. The skipped cells would compute to +0, so the result is the same bit for bit; a unit test
+compares it with the whole grid for both stencils on open, reflective and CPML edges with a mirror. Debug builds
+check after every sub-step that each cell outside the damage is +0.
+
 ## Sources
 
 Constants: `SourceOpacity = 0.9`, `DetachRampSteps = 30`.

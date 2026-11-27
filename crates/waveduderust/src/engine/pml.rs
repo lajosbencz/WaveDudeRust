@@ -33,10 +33,17 @@
 //! row), of y over the top and bottom strips (2 rim rows of full width), x first; `delta_y` follows xi over the y
 //! strips.
 
+use std::ops::Range;
+
 use rayon::prelude::*;
 
+use super::damage::Damage;
 use super::stencil::PAD;
 use super::types::{PmlLayer, SceneData};
+
+/// Cells, along either axis, from which one [`CpuPml::apply`] reads the field into a correction: psi takes D1 (2
+/// cells), `delta_y` and `O_x` take D1 of psi (2 more), and the stencil's taps of z~ reach at most 3.
+pub const REACH: usize = 4;
 
 /// Bits of a cell's cut byte: a mirror at -1, -2, +1, +2 along x, then along y.
 pub mod cut {
@@ -219,6 +226,18 @@ pub struct CpuPml {
 	zeros: Vec<f32>,
 }
 
+/// The medium a pass runs over: the cut bytes and `c2` per padded cell, `c2` at the sub-step scale.
+#[derive(Clone, Copy)]
+pub struct Medium<'a> {
+	pub cuts: &'a [u8],
+	pub c2: &'a [f32],
+}
+
+/// Whether the columns `xs` meet the `rim` columns from `g0`.
+fn meets(xs: &Range<usize>, g0: usize, rim: usize) -> bool {
+	xs.start < g0 + rim && g0 < xs.end
+}
+
 /// The seven rows of `field` from 3 above to 3 below the row whose grid cells start at padded
 /// index `at`, `gw` cells each.
 fn column_rows(field: &[f32], at: usize, s: usize, gw: usize) -> [&[f32]; 7] {
@@ -256,13 +275,18 @@ impl CpuPml {
 		}
 	}
 
-	/// Adds the rim's correction of `field` (times `scale c2`) to `out` and advances memory `set`.
-	/// `c2` per padded cell at the sub-step scale.
-	pub fn apply(&mut self, set: usize, field: &[f32], cuts: &[u8], c2: &[f32], out: &mut [f32], scale: f32) {
-		self.psi_y(set, field, cuts);
-		self.delta_y(set, field, cuts);
-		self.psi_x(set, field, cuts);
-		self.correct(set, cuts, c2, out, scale);
+	/// Adds the rim's correction of `field` (times `scale c2`) to `out` and advances memory `set`, on the rim cells
+	/// of `area` only: the top and bottom strips on its rows and columns, the left and right strips on its rows where
+	/// it meets them. `area` must hold every cell within [`REACH`] of a `field` value that is not +0 and every cell
+	/// set `set` was applied on before; the cells outside would compute to the +0 they hold.
+	pub fn apply(&mut self, set: usize, field: &[f32], medium: Medium<'_>, out: &mut [f32], scale: f32, area: &Damage) {
+		if area.is_empty() {
+			return;
+		}
+		self.psi_y(set, field, medium.cuts, area);
+		self.delta_y(set, field, medium.cuts, area);
+		self.psi_x(set, field, medium.cuts, area);
+		self.correct(set, medium, out, scale, area);
 	}
 
 	fn z_width(rim: usize) -> usize {
@@ -294,16 +318,17 @@ impl CpuPml {
 		if q >= lo && q < hi { &rows[q as usize * width..][..width] } else { &zeros[..width] }
 	}
 
-	fn psi_y(&mut self, set: usize, field: &[f32], cuts: &[u8]) {
+	fn psi_y(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
 		let strips = self.strips;
-		let (gw, s) = (strips.gw, self.stride);
+		let (gw, s, xs) = (strips.gw, self.stride, area.x.clone());
 		let y = &self.y;
-		self.psi[set][strips.x_len()..].par_chunks_mut(gw).enumerate().for_each(|(r, line)| {
+		let rows = self.psi[set][strips.x_len()..].par_chunks_mut(gw).enumerate();
+		rows.filter(|(r, _)| area.y.contains(&Self::y_row(strips, *r))).for_each(|(r, line)| {
 			let gy = Self::y_row(strips, r);
 			let [b, a, ..] = y[gy];
 			let at = (gy + PAD) * s + PAD;
-			let t = column_rows(field, at, s, gw);
-			let cut = &cuts[at..][..gw];
+			let t = column_rows(field, at, s, gw).map(|row| &row[xs.clone()]);
+			let (cut, line) = (&cuts[at..][xs.clone()], &mut line[xs.clone()]);
 			if any_cut(cut, cut::Y_SHIFT) {
 				psi_y_row::<true>(line, t, cut, b, a);
 			} else {
@@ -312,17 +337,23 @@ impl CpuPml {
 		});
 	}
 
-	fn delta_y(&mut self, set: usize, field: &[f32], cuts: &[u8]) {
+	fn delta_y(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
 		let strips = self.strips;
 		let (gw, s, rim, x_len, len) = (strips.gw, self.stride, strips.rim, strips.x_len(), strips.len());
 		let (y, axis, psi, zeros) = (&self.y, &self.axis, &self.psi[set][x_len..], &self.zeros);
 		let (xi, delta) = self.xi[set][x_len..].split_at_mut(len - x_len);
-		xi.par_chunks_mut(gw).zip(delta.par_chunks_mut(gw)).enumerate().for_each(|(r, (xi, delta))| {
+		let xs = area.x.clone();
+		let rows = xi.par_chunks_mut(gw).zip(delta.par_chunks_mut(gw)).enumerate();
+		rows.filter(|(r, _)| area.y.contains(&Self::y_row(strips, *r))).for_each(|(r, (xi, delta))| {
 			let gy = Self::y_row(strips, r);
 			let at = (gy + PAD) * s + PAD;
-			let p = |k: isize| Self::neighbour(psi, zeros, rim, gw, r, k);
-			let row =
-				YRow { t: column_rows(field, at, s, gw), psi: [p(1), p(-1), p(2), p(-2)], cut: &cuts[at..][..gw] };
+			let p = |k: isize| &Self::neighbour(psi, zeros, rim, gw, r, k)[xs.clone()];
+			let row = YRow {
+				t: column_rows(field, at, s, gw).map(|row| &row[xs.clone()]),
+				psi: [p(1), p(-1), p(2), p(-2)],
+				cut: &cuts[at..][xs.clone()],
+			};
+			let (xi, delta) = (&mut xi[xs.clone()], &mut delta[xs.clone()]);
 			if any_cut(row.cut, cut::Y_SHIFT) {
 				delta_y_row::<true>(&row, axis, y[gy], xi, delta);
 			} else {
@@ -331,26 +362,30 @@ impl CpuPml {
 		});
 	}
 
-	/// Fills `z~ = u + chi (D3y u + delta_y)` of the x strips' columns and 3 beyond, per grid row,
-	/// and advances psi of x on it.
-	fn psi_x(&mut self, set: usize, field: &[f32], cuts: &[u8]) {
+	/// Fills `z~ = u + chi (D3y u + delta_y)` of the x strips' columns and 3 beyond, per grid row of `area` and
+	/// strip it meets, and advances psi of x on it.
+	fn psi_x(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
 		let strips = self.strips;
 		let Strips { gw, rim, .. } = strips;
 		let (s, cross, zw) = (self.stride, self.cross, Self::z_width(rim));
 		let mut psi = std::mem::take(&mut self.psi[set]);
 		let mut z = std::mem::take(&mut self.z);
 		let (x, delta, zeros) = (&self.x, &self.xi[set][strips.len()..], &self.zeros);
-		psi[..strips.x_len()].par_chunks_mut(2 * rim).zip(z.par_chunks_mut(zw)).enumerate().for_each(
-			|(gy, (row, zrow))| {
+		let (ys, xs, right_start) = (area.y.clone(), area.x.clone(), gw - rim);
+		let psi_rows = &mut psi[ys.start * 2 * rim..ys.end * 2 * rim];
+		psi_rows.par_chunks_mut(2 * rim).zip(z[ys.start * zw..ys.end * zw].par_chunks_mut(zw)).enumerate().for_each(
+			|(k, (row, zrow))| {
+				let gy = ys.start + k;
 				let base = (gy + PAD) * s + PAD;
 				let d = Self::strip_row(strips, gy).map_or(&zeros[..gw], |r| &delta[r * gw..][..gw]);
 				let (left, right) = zrow.split_at_mut(rim + 6);
-				let right_start = gw - rim;
-				z_span(left, field, base, s, cross, d, -3);
-				z_span(right, field, base, s, cross, d, right_start as isize - 3);
 				let (pl, pr) = row.split_at_mut(rim);
-				for (span, zs, g0) in [(pl, &*left, 0), (pr, &*right, right_start)] {
-					let (cut, x) = (&cuts[base + g0..][..rim], &x[g0..][..rim]);
+				for (span, zs, g0) in [(pl, left, 0), (pr, right, right_start)] {
+					if !meets(&xs, g0, rim) {
+						continue;
+					}
+					z_span(zs, field, base, s, cross, d, g0 as isize - 3);
+					let (cut, x, zs) = (&cuts[base + g0..][..rim], &x[g0..][..rim], &*zs);
 					if any_cut(cut, cut::X_SHIFT) {
 						psi_x_span::<true>(span, zs, cut, x);
 					} else {
@@ -363,19 +398,25 @@ impl CpuPml {
 		self.z = z;
 	}
 
-	fn correct(&mut self, set: usize, cuts: &[u8], c2: &[f32], out: &mut [f32], scale: f32) {
+	fn correct(&mut self, set: usize, Medium { cuts, c2 }: Medium<'_>, out: &mut [f32], scale: f32, area: &Damage) {
 		let strips = self.strips;
-		let Strips { gw, gh, rim } = strips;
+		let Strips { gw, rim, .. } = strips;
 		let (s, zw) = (self.stride, Self::z_width(rim));
 		let mut memory = std::mem::take(&mut self.xi[set]);
 		let (xi_x, rest) = memory.split_at_mut(strips.x_len());
 		let delta = &rest[strips.len() - strips.x_len()..];
 		let (pml, psi) = (&*self, &self.psi[set][..strips.x_len()]);
-		let rows = &mut out[PAD * s..(PAD + gh) * s];
-		let right_start = gw - rim;
-		rows.par_chunks_mut(s).zip(xi_x.par_chunks_mut(2 * rim)).enumerate().for_each_init(
+		let (ys, xs, right_start) = (area.y.clone(), area.x.clone(), gw - rim);
+		let rows = &mut out[(PAD + ys.start) * s..(PAD + ys.end) * s];
+		let sides = [meets(&xs, 0, rim), meets(&xs, right_start, rim)];
+		// The columns of `xs` between the x strips, empty when it lies within one.
+		let mid_start = xs.start.max(rim);
+		let mid = mid_start..xs.end.min(right_start).max(mid_start);
+		let xi_rows = &mut xi_x[ys.start * 2 * rim..ys.end * 2 * rim];
+		rows.par_chunks_mut(s).zip(xi_rows.par_chunks_mut(2 * rim)).enumerate().for_each_init(
 			|| vec![0.0f32; rim + 4],
-			|padded, (gy, (line, xi_x))| {
+			|padded, (k, (line, xi_x))| {
+				let gy = ys.start + k;
 				let base = (gy + PAD) * s + PAD;
 				let (line, c2) = (&mut line[PAD..][..gw], &c2[base..][..gw]);
 				let (zl, zr) = pml.z[gy * zw..][..zw].split_at(rim + 6);
@@ -403,15 +444,24 @@ impl CpuPml {
 							}
 							sum
 						};
-						pml.correct_span(&left, xl, line_l, padded, scale, plain);
-						pml.correct_span(&right, xr, line_r, padded, scale, |k| plain(right_start + k));
-						for (k, v) in line_mid.iter_mut().enumerate() {
-							*v += scale * c2[rim + k] * plain(rim + k);
+						if sides[0] {
+							pml.correct_span(&left, xl, line_l, padded, scale, plain);
+						}
+						if sides[1] {
+							pml.correct_span(&right, xr, line_r, padded, scale, |k| plain(right_start + k));
+						}
+						let (cells, c2) = (&mut line_mid[mid.start - rim..mid.end - rim], &c2[mid.clone()]);
+						for (k, (v, &c)) in cells.iter_mut().zip(c2).enumerate() {
+							*v += scale * c * plain(mid.start + k);
 						}
 					}
 					None => {
-						pml.correct_span(&left, xl, line_l, padded, scale, |_| 0.0);
-						pml.correct_span(&right, xr, line_r, padded, scale, |_| 0.0);
+						if sides[0] {
+							pml.correct_span(&left, xl, line_l, padded, scale, |_| 0.0);
+						}
+						if sides[1] {
+							pml.correct_span(&right, xr, line_r, padded, scale, |_| 0.0);
+						}
 					}
 				}
 			},
