@@ -13,34 +13,16 @@ use crate::ui::AppWindow;
 /// The Messages pane: its rows, search, levels, selection, copy and clear.
 pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	app.set_log_rows(state.borrow().messages.rows());
-	let on_log = |f: fn(&mut Messages, slint::SharedString)| {
-		let h = Handle::new(state, app);
-		move |arg: slint::SharedString| {
-			h.with(|s, app| {
-				f(&mut s.messages, arg);
-				s.messages.show(app);
-			});
+	app.on_log_search(on_log(state, app, |m, t: slint::SharedString| m.search(&t)));
+	let clear = on_log(state, app, |m, ()| m.clear());
+	app.on_log_clear(move || clear(()));
+	app.on_log_regex(on_log(state, app, Messages::set_regex));
+	let select = on_log(state, app, |m, (row, control, shift)| {
+		if let Some(row) = models::index_from_ui(row) {
+			m.select(row, control, shift);
 		}
-	};
-	let search = on_log(|m, t| m.search(&t));
-	app.on_log_search(search);
-	let clear = on_log(|m, _| m.clear());
-	app.on_log_clear(move || clear(slint::SharedString::new()));
-	let h = Handle::new(state, app);
-	app.on_log_regex(move |on| {
-		h.with(|s, app| {
-			s.messages.set_regex(on);
-			s.messages.show(app);
-		});
 	});
-	let h = Handle::new(state, app);
-	app.on_log_select(move |row, control, shift| {
-		let Some(row) = models::index_from_ui(row) else { return };
-		h.with(|s, app| {
-			s.messages.select(row, control, shift);
-			s.messages.show(app);
-		});
-	});
+	app.on_log_select(move |row, control, shift| select((row, control, shift)));
 	let st = state.clone();
 	app.on_log_copy(move |all| {
 		let text = st.borrow().messages.text(all);
@@ -52,11 +34,20 @@ pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		}
 		true
 	});
+	app.on_log_toggle(on_log(state, app, Messages::toggle));
+}
+
+/// A Messages pane handler: `f` on the messages with the callback's argument, the pane refreshed after.
+fn on_log<A: 'static>(
+	state: &Rc<RefCell<State>>,
+	app: &AppWindow,
+	f: impl Fn(&mut Messages, A) + 'static,
+) -> impl Fn(A) + 'static {
 	let h = Handle::new(state, app);
-	app.on_log_toggle(move |level| {
+	move |arg| {
 		h.with(|s, app| {
-			s.messages.toggle(level);
+			f(&mut s.messages, arg);
 			s.messages.show(app);
 		});
-	});
+	}
 }
