@@ -3,7 +3,7 @@ import { Button, LineEdit } from "std-widgets.slint";
 import { SchemeCombo } from "scheme-combo.slint";
 import { ColorSwatch } from "color-picker.slint";
 import { Theme } from "theme.slint";
-import { IconButton } from "icons.slint";
+import { Specs } from "number-box.slint";
 import { MenuIcons } from "menu-icons.slint";
 import { Form, FormSection, FormPanel, FormLabel, FormValue, FormReadout, Check, FormInt, FormFloat, FormCheck, FormText, FormNotes, FormDescription, FormLink, RowRemove, RowAdd, ListButton, Mine } from "form.slint";
 import { SceneModeChoice, EdgesChoice, StencilCheck, SourceModeChoice, PulseShapeChoice, DetectorChoice, LayerChoice, FieldMeasurementChoice, IntensityMeasurementChoice, ProbeKindChoice, BoxSizeChoice, ScaleModeChoice, YScaleChoice, ProfileChoice, TriangleTypeChoice, DivisionChoice, FacetPatternChoice, MetaLensTypeChoice, FiberEndsChoice, SchemeKindChoice } from "choices.slint";
@@ -138,7 +138,7 @@ export component SceneForm inherits VerticalLayout {
             }
             FormFloat {
                 value <=> Form.scene.refractive-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of a blank canvas, 1.0 to 2.55. The wave speed is 1/n cells per step.");
             }
         }
@@ -419,11 +419,11 @@ export component SourceForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("X"); tip: @tr("X of the emitter, or of the array centre, in canvas pixels."); }
-            FormFloat { value <=> Form.source.x; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the emitter, or of the array centre, in canvas pixels."); }
+            FormFloat { value <=> Form.source.x; spec: Specs.non-negative; tip: @tr("X of the emitter, or of the array centre, in canvas pixels."); }
         }
         Row {
             FormLabel { text: @tr("Y"); tip: @tr("Y of the emitter, or of the array centre, in canvas pixels."); }
-            FormFloat { value <=> Form.source.y; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the emitter, or of the array centre, in canvas pixels."); }
+            FormFloat { value <=> Form.source.y; spec: Specs.non-negative; tip: @tr("Y of the emitter, or of the array centre, in canvas pixels."); }
         }
     }
     FormSection { text: @tr("Wave"); }
@@ -570,7 +570,7 @@ export component SourceForm inherits VerticalLayout {
             FormLabel { text: @tr("Frequency"); tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off."); }
             FormInt {
                 value <=> Form.array.random-frequency;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.composite;
                 tip: @tr("Each emitter's level is offset by up to \u{B1} this amount. 0 turns it off.");
             }
@@ -579,7 +579,7 @@ export component SourceForm inherits VerticalLayout {
             FormLabel { text: @tr("Phase"); tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off."); }
             FormInt {
                 value <=> Form.array.random-phase;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.composite;
                 tip: @tr("Each emitter's phase is offset by up to \u{B1} this many degrees. 0 turns it off.");
             }
@@ -591,7 +591,7 @@ export component SourceForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.array.random-off-width;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.composite;
                 tip: @tr("Each gap between bursts is offset by up to \u{B1} this many cycles, re-drawn every period. 0 turns it off.");
             }
@@ -603,7 +603,7 @@ export component SourceForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.array.random-position;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.composite;
                 tip: @tr("Each emitter is moved by up to \u{B1} this many pixels in X and in Y. 0 turns it off.");
             }
@@ -632,7 +632,7 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel { text: @tr("Start after step"); tip: @tr("Step at which recording starts; 0 records from the first step."); }
             FormInt {
                 value <=> Form.probe.start-after;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 tip: @tr("Step at which recording starts; 0 records from the first step.");
             }
         }
@@ -711,17 +711,17 @@ export component ProbeForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("A x"); tip: @tr("X of the probe pixel, or of the start of the line, in canvas pixels."); }
-            FormInt { value <=> Form.probe.ax; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the probe pixel, or of the start of the line, in canvas pixels."); }
+            FormInt { value <=> Form.probe.ax; spec: Specs.non-negative; tip: @tr("X of the probe pixel, or of the start of the line, in canvas pixels."); }
         }
         Row {
             FormLabel { text: @tr("A y"); tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
-            FormInt { value <=> Form.probe.ay; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
+            FormInt { value <=> Form.probe.ay; spec: Specs.non-negative; tip: @tr("Y of the probe pixel, or of the start of the line, in canvas pixels."); }
         }
         Row {
             FormLabel { text: @tr("B x"); tip: @tr("X of the end of the line in canvas pixels; line probes only."); }
             FormInt {
                 value <=> Form.probe.bx;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.line;
                 tip: @tr("X of the end of the line in canvas pixels; line probes only.");
             }
@@ -730,7 +730,7 @@ export component ProbeForm inherits VerticalLayout {
             FormLabel { text: @tr("B y"); tip: @tr("Y of the end of the line in canvas pixels; line probes only."); }
             FormInt {
                 value <=> Form.probe.by;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 enabled: root.line;
                 tip: @tr("Y of the end of the line in canvas pixels; line probes only.");
             }
@@ -755,7 +755,7 @@ export component ProbeForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.probe.box-x;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 tip: @tr("Left edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
             }
         }
@@ -766,7 +766,7 @@ export component ProbeForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.probe.box-y;
-                spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.non-negative;
                 tip: @tr("Top edge of the graph box in canvas pixels. A box placed on the probe's point A moves with the probe; dragging it close snaps it on.");
             }
         }
@@ -883,11 +883,11 @@ component PartCommon inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("X"); tip: @tr("X of the part's centre in canvas pixels."); }
-            FormInt { value <=> Form.part.x; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("X of the part's centre in canvas pixels."); }
+            FormInt { value <=> Form.part.x; spec: Specs.non-negative; tip: @tr("X of the part's centre in canvas pixels."); }
         }
         Row {
             FormLabel { text: @tr("Y"); tip: @tr("Y of the part's centre in canvas pixels."); }
-            FormInt { value <=> Form.part.y; spec: { min: 0, max: 1000000000, increment: 1, decimals: -1 }; tip: @tr("Y of the part's centre in canvas pixels."); }
+            FormInt { value <=> Form.part.y; spec: Specs.non-negative; tip: @tr("Y of the part's centre in canvas pixels."); }
         }
         Row {
             FormLabel {
@@ -1013,7 +1013,7 @@ component ShapeMaterial inherits VerticalLayout {
             FormLabel { text: @tr("Refractive index"); tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.material.refractive-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 enabled: root.glass;
                 tip: @tr("Refractive index of the glass, 1.00 to 2.55 in steps of 0.01.");
             }
@@ -1310,7 +1310,7 @@ export component DiffuserForm inherits VerticalLayout {
             FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its rough face."); }
             FormInt {
                 value <=> Form.diffuser.length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its rough face.");
             }
         }
@@ -1404,7 +1404,7 @@ export component ZonePlateForm inherits VerticalLayout {
             FormLabel { text: @tr("Focal length"); tip: @tr("Distance in pixels from the plate to its focus, for a plane wave arriving along the axis."); }
             FormInt {
                 value <=> Form.zone-plate.focal-length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Distance in pixels from the plate to its focus, for a plane wave arriving along the axis.");
             }
         }
@@ -1461,7 +1461,7 @@ export component ZonePlateForm inherits VerticalLayout {
             FormLabel { text: @tr("Mount width"); tip: @tr("Width in pixels of the absorbing mount on either side, beyond the diameter."); }
             FormInt {
                 value <=> Form.zone-plate.mount-width;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 enabled: Form.zone-plate.mount;
                 tip: @tr("Width in pixels of the absorbing mount on either side, beyond the diameter.");
             }
@@ -1515,7 +1515,7 @@ export component BraggReflectorForm inherits VerticalLayout {
             FormLabel { text: @tr("Index 1"); tip: @tr("Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.bragg.index1;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the first layer of each pair, 1.00 to 2.55 in steps of 0.01.");
             }
         }
@@ -1534,7 +1534,7 @@ export component BraggReflectorForm inherits VerticalLayout {
             FormLabel { text: @tr("Index 2"); tip: @tr("Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.bragg.index2;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the second layer of each pair, 1.00 to 2.55 in steps of 0.01.");
             }
         }
@@ -1559,7 +1559,7 @@ export component GrinLensForm inherits VerticalLayout {
             FormLabel { text: @tr("Centre index"); tip: @tr("Refractive index on the axis, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.grin.centre-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index on the axis, 1.00 to 2.55 in steps of 0.01.");
             }
         }
@@ -1570,7 +1570,7 @@ export component GrinLensForm inherits VerticalLayout {
             }
             FormFloat {
                 value <=> Form.grin.edge-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index at the edge, 1.00 to 2.55 in steps of 0.01. The profile between the axis and the edge is parabolic.");
             }
         }
@@ -1579,7 +1579,7 @@ export component GrinLensForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels."); }
-            FormInt { value <=> Form.grin.length; spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent along the axis in pixels."); }
+            FormInt { value <=> Form.grin.length; spec: Specs.length; tip: @tr("Extent along the axis in pixels."); }
         }
         Row {
             FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels."); }
@@ -1663,7 +1663,7 @@ export component FacettedGratingForm inherits VerticalLayout {
             FormLabel { text: @tr("Length"); tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its facetted face."); }
             FormInt {
                 value <=> Form.facets.length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Extent along the axis in pixels: the plate's thickness at the mean of its facetted face.");
             }
         }
@@ -1737,7 +1737,7 @@ export component MetaSurfaceForm inherits VerticalLayout {
             FormLabel { text: @tr("Length"); tip: @tr("Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it."); }
             FormInt {
                 value <=> Form.meta.length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Thickness of the carrier plate along the axis in pixels; the pattern stands on its front, outside it.");
             }
         }
@@ -1780,7 +1780,7 @@ export component MetaSurfaceForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.meta.focal-length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Distance in pixels from the lens to its focus, for a plane wave arriving along the axis; a diverging lens spreads the wave as if from a focus that far behind it.");
             }
         }
@@ -1856,7 +1856,7 @@ export component MetaSurfaceForm inherits VerticalLayout {
             }
             FormFloat {
                 value <=> Form.meta.pattern-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the ridges, 1.00 to 2.55 in steps of 0.01, usually above the plate's. The higher, the lower the pattern can be.");
             }
         }
@@ -1965,7 +1965,7 @@ export component LogicGateForm inherits VerticalLayout {
             }
             FormFloat {
                 value <=> Form.gate.core-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the waveguide cores, 1.00 to 2.55 in steps of 0.01. It must be above the cladding's; the larger the difference, the narrower the cores and the tighter the bends.");
             }
         }
@@ -1973,7 +1973,7 @@ export component LogicGateForm inherits VerticalLayout {
             FormLabel { text: @tr("Cladding index"); tip: @tr("Refractive index of the cladding around the cores, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.gate.cladding-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the cladding around the cores, 1.00 to 2.55 in steps of 0.01.");
             }
         }
@@ -2183,7 +2183,7 @@ component LayerList inherits VerticalLayout {
             }
             FormFloat {
                 value <=> layer.refractive-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("The layer's refractive index, 1 to 2.55.");
             }
             HorizontalLayout {
@@ -2241,7 +2241,7 @@ export component InterferenceFilterForm inherits VerticalLayout {
             FormLabel { text: @tr("Length"); tip: @tr("Extent of the plate along the axis in pixels, without the layers, which lie on its front."); }
             FormInt {
                 value <=> Form.filter.length;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Extent of the plate along the axis in pixels, without the layers, which lie on its front.");
             }
         }
@@ -2249,7 +2249,7 @@ export component InterferenceFilterForm inherits VerticalLayout {
             FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels, of the plate and the layers alike."); }
             FormInt {
                 value <=> Form.filter.width;
-                spec: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.length;
                 tip: @tr("Extent across the axis in pixels, of the plate and the layers alike.");
             }
         }
@@ -2345,7 +2345,7 @@ export component FiberForm inherits VerticalLayout {
             FormLabel { text: @tr("Core index"); tip: @tr("Refractive index of the core, 1.00 to 2.55 in steps of 0.01."); }
             FormFloat {
                 value <=> Form.fiber.core-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the core, 1.00 to 2.55 in steps of 0.01.");
             }
         }
@@ -2368,7 +2368,7 @@ export component FiberForm inherits VerticalLayout {
             }
             FormFloat {
                 value <=> Form.fiber.cladding-index;
-                spec: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+                spec: Specs.index;
                 tip: @tr("Refractive index of the cladding, 1.00 to 2.55 in steps of 0.01. Below the core's index, the fibre guides.");
             }
         }

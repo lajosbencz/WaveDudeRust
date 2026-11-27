@@ -14,6 +14,13 @@ export struct NumberSpec {
     drag-step: float,
 }
 
+// The settings shared by many fields.
+export global Specs {
+    out property <NumberSpec> index: { min: 1, max: 2.55, increment: 0.01, decimals: -1 };
+    out property <NumberSpec> non-negative: { min: 0, max: 1000000000, increment: 1, decimals: -1 };
+    out property <NumberSpec> length: { min: 1, max: 1000000000, increment: 10, decimals: 0 };
+}
+
 // The arithmetic, in src/number.rs.
 export global NumberLogic {
     pure callback step(spec: NumberSpec, text: string, steps: int) -> string;
