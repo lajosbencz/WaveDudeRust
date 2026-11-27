@@ -9,8 +9,8 @@
 //!   cells, and on the first and last grid rows the rings above and below.
 //! - `Y(q, j)`, with a rim, on a y-strip row of the area: psi of y of level `j - 1`.
 //!
-//! The 4th order splits the update in two: `W(q, j)` writes `w = c2 L u` of level `j - 1` into row `q` of the plane
-//! `w`, with a rim xi of y, `delta_y` and the x part of the rim's first application, then adds the forcing of sub-step
+//! The 4th order splits the update in two: `W(q, j)` writes `w = c2 L u` of level `j - 1` into row `q` of `w`, with
+//! a rim xi of y, `delta_y` and the x part of the rim's first application, then adds the forcing of sub-step
 //! `j - 1` to the row's driven cells; `D(q, j)` takes, with a rim, xi of y and `delta_y` of the second application
 //! (on `w`), the outer update of row `q` from level `j - 1` and `w` (the intensity stages on level `n`), the second
 //! application's x part, and Mur's condition as above. With a rim, psi of y is a unit per application: on the field
@@ -23,6 +23,12 @@
 //! order's `W` reads the field within 3 rows (its stencil, `delta_y`), `D` reads `w` within 3 rows and the field of
 //! its own row; `w` of level `j` is written over level `j - 1`. [`kinds`] lists these reads, and [`Tiling`] derives
 //! from them which units a band of rows can run without its neighbours, and the order.
+//!
+//! `w` lives in two places. A seam's units write and read the plane `w`, one row per grid row for all levels, which
+//! is what [`kinds`] describes. A band's units keep `w` of each level in a ring of rows ([`Rings`]), its slot reused
+//! by `W` of the same level some rows on, which [`Tiling`] sizes as one more overwrite ([`RingShape`]); `W` also
+//! copies to the plane the rows of `w` the seams' units read, once the rim's correction and the forcing have completed
+//! them.
 
 use std::ops::Range;
 
@@ -207,6 +213,29 @@ pub(super) struct Tiling {
 	rho: usize,
 	/// `s_k(j)` at `shrink[k][j - 1]`.
 	shrink: Vec<Vec<usize>>,
+	/// The 4th order's rings of `w` rows: the slots, the rows each side of its own a reader of `w` takes, and by level
+	/// the reach of the seams' readers into a band ([`Ring`]); None for the 9-point.
+	ring: Option<RingShape>,
+}
+
+/// The shape of a band's rings of `w` rows, one ring per level (derived by [`Tiling::new`]; module docs of
+/// engine/avx, Blocked steps).
+///
+/// Row `q` of level `j` lives in slot `q % slots` of level `j`'s ring. `W(q + slots, j)` reuses the slot, an overwrite
+/// of `w` of level `j` by a unit of the same level `slots` rows on: a unit `X` reading `w` within `reach` rows of its
+/// own reads row `q` last at the sweep's front `f = q + reach - o_X`, and `W(q + slots, j)` writes at `f = q + slots -
+/// o_W`, before `X` within a tick, so `slots >= o_W - o_X + reach + 1` for every such read: 7 slots for the 4th order, 8
+/// with a rim. A reader takes `2 span + 1` consecutive rows as one slice, so each ring holds `2 span` more rows, copies
+/// of its first slots' (rows `q` with `q % slots < 2 span` are written twice).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RingShape {
+	slots: usize,
+	span: usize,
+	/// By level, `max(s_X(j) + reach)` over the units `X` reading `w`: a seam's units read `w` of level `j` up to this
+	/// far into the band at its side, on the rows the band's `W` writes from `s_W(j)` on, so the band writes those rows
+	/// to the plane `w` too. They are disjoint across levels (`s_W(j + 1) >= s_X(j) + reach`, `W`'s overwrite of the
+	/// plane), so the plane holds them all for the seams.
+	seam: Vec<usize>,
 }
 
 impl Tiling {
@@ -260,7 +289,18 @@ impl Tiling {
 			}
 		}
 		let rho = kinds.iter().map(|k| k.span).max().unwrap_or(0);
-		Self { n, scheme, rim, kinds, lag, rho, shrink }
+		let ring = kinds.iter().position(|k| k.unit == Unit::Lap).map(|lap| {
+			let readers: Vec<(usize, usize)> = (0..kinds.len())
+				.flat_map(|x| kinds[x].reads.iter().filter(|r| r.of == lap && r.back == 0).map(move |r| (x, r.reach)))
+				.collect();
+			let o_w = kinds[lap].offset;
+			let slots = readers.iter().map(|&(x, reach)| o_w + reach - kinds[x].offset + 1).max().unwrap_or(1);
+			let span = readers.iter().map(|&(x, _)| kinds[x].span).max().unwrap_or(0);
+			assert!(slots > 2 * span, "a reader's rows lie in distinct slots");
+			let seam = (0..n).map(|j| readers.iter().map(|&(x, reach)| shrink[x][j] + reach).max().unwrap_or(0));
+			RingShape { slots, span, seam: seam.collect() }
+		});
+		Self { n, scheme, rim, kinds, lag, rho, shrink, ring }
 	}
 
 	/// Whether this is the tiling of `n` levels of `scheme` with or without a rim.
@@ -313,6 +353,112 @@ impl Tiling {
 	}
 }
 
+/// The 4th order's rings of `w` rows of a blocked step's bands, kept from step to step ([`RingShape`]): per band, a
+/// ring of `slots + 2 span` rows of `s` values per level, then `2 span + 1` rows for a reader's rows across the area's
+/// edge.
+///
+/// `W` writes the area's columns of a row, and the rim's x part adds +0 to the cells of its strips beyond them, so a
+/// ring's other columns hold +0 as the plane `w` does there, once cleared, for as long as the steps' columns cover the
+/// columns of the steps before (they do until a reset or another scene).
+#[derive(Default)]
+pub(super) struct Rings {
+	bands: Vec<Vec<f32>>,
+	/// The columns the rings may hold values other than +0 in: those of the steps since they were cleared.
+	xs: Range<usize>,
+}
+
+impl Rings {
+	/// The rings of `count` bands of `len` values each, for a step on the columns `xs`: +0 beyond `xs`.
+	fn prepare(&mut self, count: usize, len: usize, xs: &Range<usize>) -> &mut [Vec<f32>] {
+		let within = self.xs.is_empty() || (xs.start <= self.xs.start && self.xs.end <= xs.end);
+		if !within {
+			self.bands.iter_mut().for_each(|band| band.fill(0.0));
+		}
+		self.xs = xs.clone();
+		if self.bands.len() < count {
+			self.bands.resize_with(count, Vec::new);
+		}
+		for band in &mut self.bands[..count] {
+			if band.len() != len {
+				band.clear();
+				band.resize(len, 0.0);
+			}
+		}
+		&mut self.bands[..count]
+	}
+}
+
+/// A band's rings of `w` rows in a blocked step ([`Rings`]).
+struct Ring<'r> {
+	rows: &'r mut [f32],
+	shape: &'r RingShape,
+	s: usize,
+	/// The band's rows, and whether another band lies above and below it.
+	band: Range<usize>,
+	inner: (bool, bool),
+}
+
+impl Ring<'_> {
+	/// Where level `j`'s ring starts.
+	fn level(&self, j: usize) -> usize {
+		(j - 1) * (self.shape.slots + 2 * self.shape.span) * self.s
+	}
+
+	/// The slot of row `q` of level `j`.
+	fn slot(&self, q: usize, j: usize) -> Range<usize> {
+		let at = self.level(j) + q % self.shape.slots * self.s;
+		at..at + self.s
+	}
+
+	/// Row `q` of `w` of level `j`, for `W(q, j)` to write; [`written`](Self::written) once written.
+	fn row_mut(&mut self, q: usize, j: usize) -> &mut [f32] {
+		let slot = self.slot(q, j);
+		&mut self.rows[slot]
+	}
+
+	/// Copies row `q` of level `j`, just written, to the slot's copy past the ring's end, if it has one; returns whether
+	/// a seam's units read the row, which the band then writes to the plane.
+	fn written(&mut self, q: usize, j: usize) -> bool {
+		let (slot, extra) = (self.slot(q, j), 2 * self.shape.span);
+		if q % self.shape.slots < extra {
+			let copy = slot.start + self.shape.slots * self.s;
+			self.rows.copy_within(slot, copy);
+		}
+		let reach = self.shape.seam[j - 1];
+		(self.inner.0 && q < self.band.start + reach) || (self.inner.1 && q + reach >= self.band.end)
+	}
+
+	/// The rows `q - span` to `q + span` of `w` of level `j`, as one slice: the ring's on the rows of `area`, which the
+	/// band's `W` has written once a reader of `q` runs, +0 elsewhere, as in the plane.
+	fn rows(&mut self, q: usize, j: usize, area: &Range<usize>) -> &[f32] {
+		let (span, s) = (self.shape.span, self.s);
+		let len = (2 * span + 1) * s;
+		if q >= area.start + span && q + span < area.end {
+			let at = self.slot(q - span, j).start;
+			return &self.rows[at..at + len];
+		}
+		let window = self.rows.len() - len;
+		for k in 0..2 * span + 1 {
+			let at = window + k * s;
+			match (q + k).checked_sub(span).filter(|r| area.contains(r)) {
+				Some(r) => {
+					let slot = self.slot(r, j);
+					self.rows.copy_within(slot, at);
+				}
+				None => self.rows[at..at + s].fill(0.0),
+			}
+		}
+		&self.rows[window..]
+	}
+}
+
+/// What a thread's units of one part of a blocked step hold: the rim's scratch, and in a band of the 4th order the
+/// band's rings of `w` rows (the seams' units take `w` from the plane).
+struct Lane<'l> {
+	scratch: &'l mut Option<XScratch>,
+	ring: Option<Ring<'l>>,
+}
+
 /// The rim's state for a blocked step: the tables, z~ of each grid row, and the memory variables of each application
 /// with its pass's columns and scale (one application for the 9-point, two for the 4th order).
 pub(super) struct Rim<'a> {
@@ -345,7 +491,8 @@ impl<'a> RimSet<'a> {
 	}
 }
 
-/// How a blocked step updates a row: the 9-point leapfrog, or the 4th order's two passes through the plane `w`.
+/// How a blocked step updates a row: the 9-point leapfrog, or the 4th order's two passes through `w`, the plane given
+/// here and the bands' rings ([`Rings`]).
 pub(super) enum Line<'a> {
 	Nine(NineLine<'a>),
 	Drp(DrpLine<'a>, Shared),
@@ -383,8 +530,8 @@ impl Step<'_> {
 	}
 
 	/// Runs the step's units with the threads of the rayon pool: the bands, then the seams between them ([`Tiling`]).
-	pub(super) fn run(&self, tiling: &Tiling, bands: usize) {
-		let (rows, area) = (self.rows(), &self.area);
+	pub(super) fn run(&self, tiling: &Tiling, bands: usize, rings: &mut Rings) {
+		let (rows, area, s) = (self.rows(), &self.area, self.s);
 		let count = bands.clamp(1, (area.len() / tiling.min_band()).max(1));
 		// Band k starts at row start(k): the area's rows split evenly, the rows beyond it to the outer bands.
 		let start = |k: usize| match k {
@@ -393,35 +540,51 @@ impl Step<'_> {
 			k => area.start + k * area.len() / count,
 		};
 		let scratch = || self.rim.as_ref().map(|rim| rim.tables.scratch());
-		let band = |scratch: &mut Option<XScratch>, k: usize| {
-			let inner = (k > 0, k + 1 < count);
-			tiling.band(start(k)..start(k + 1), inner, |unit, q, j| self.unit(unit, q, j, scratch));
+		// The 4th order's bands keep `w` in rings of rows.
+		let shape = tiling.ring.as_ref().filter(|_| matches!(self.line, Line::Drp(..)));
+		let bufs = match (shape, &self.line) {
+			(Some(shape), Line::Drp(line, _)) => {
+				let len = (self.n * (shape.slots + 2 * shape.span) + 2 * shape.span + 1) * s;
+				rings.prepare(count, len, line.xs)
+			}
+			_ => &mut [],
+		};
+		let band = |scratch: &mut Option<XScratch>, k: usize, buf: Option<&mut Vec<f32>>| {
+			let (band, inner) = (start(k)..start(k + 1), (k > 0, k + 1 < count));
+			let ring = buf.zip(shape).map(|(rows, shape)| Ring { rows, shape, s, band: band.clone(), inner });
+			let mut lane = Lane { scratch, ring };
+			tiling.band(band, inner, |unit, q, j| self.unit(unit, q, j, &mut lane));
 		};
 		if count == 1 {
-			return band(&mut scratch(), 0);
+			return band(&mut scratch(), 0, bufs.first_mut());
 		}
-		(0..count).into_par_iter().for_each_init(scratch, band);
+		if bufs.is_empty() {
+			(0..count).into_par_iter().for_each_init(scratch, |scratch, k| band(scratch, k, None));
+		} else {
+			bufs.par_iter_mut().enumerate().for_each_init(scratch, |scratch, (k, buf)| band(scratch, k, Some(buf)));
+		}
 		(1..count).into_par_iter().for_each_init(scratch, |scratch, k| {
-			tiling.seam(start(k), |unit, q, j| self.unit(unit, q, j, scratch));
+			let mut lane = Lane { scratch, ring: None };
+			tiling.seam(start(k), |unit, q, j| self.unit(unit, q, j, &mut lane));
 		});
 	}
 
 	/// Unit `unit` of row `q` and level `j`.
-	fn unit(&self, unit: Unit, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+	fn unit(&self, unit: Unit, q: usize, j: usize, lane: &mut Lane<'_>) {
 		super::wide(
 			#[inline(always)]
 			|| match unit {
-				Unit::Psi(set) => self.psi(set, q, j),
+				Unit::Psi(set) => self.psi(set, q, j, lane),
 				Unit::Lap => {
 					if self.area.contains(&q) {
-						self.lap(q, j, scratch);
+						self.lap(q, j, lane);
 					}
 				}
 				Unit::Update => {
 					if self.area.contains(&q) {
 						match &self.line {
-							Line::Nine(line) => self.leapfrog(line, q, j, scratch),
-							Line::Drp(line, w) => self.outer(line, *w, q, j, scratch),
+							Line::Nine(line) => self.leapfrog(line, q, j, lane.scratch),
+							Line::Drp(line, w) => self.outer(line, *w, q, j, lane),
 						}
 					}
 					self.open_edges(q, j);
@@ -439,17 +602,21 @@ impl Step<'_> {
 		}
 	}
 
-	/// psi of y of application `set` on y-strip row `q` of the area; nothing on other rows.
+	/// psi of y of application `set` on y-strip row `q` of the area; nothing on other rows. A band's units of the 4th
+	/// order's second application take `w` from the band's ring.
 	#[inline(always)]
-	fn psi(&self, set: usize, q: usize, j: usize) {
+	fn psi(&self, set: usize, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let Some(rim) = &self.rim else { return };
 		let Some(k) = rim.tables.strip_row(q).filter(|_| self.area.contains(&q)) else { return };
 		let (s, gw, r, memory) = (self.s, self.gw, q + PAD, &rim.sets[set]);
-		// SAFETY: the planes, `w` and the CPML's memory outlive the step. The tiling runs no unit that writes the rows
-		// within 3 of `q` of the buffer `set` reads, or psi of y of row `q`, while this one runs, and no other unit
-		// touches psi of y of row `q`.
-		let (field, line) =
-			unsafe { (self.field(set, j).get((r - 3) * s..(r + 4) * s), memory.psi_y.get_mut(k * gw..(k + 1) * gw)) };
+		let field = match (set, lane.ring.as_mut()) {
+			(1, Some(ring)) => ring.rows(q, j, &self.area),
+			// SAFETY: the planes and `w` outlive the step. The tiling runs no unit that writes the rows within 3 of `q`
+			// of the buffer `set` reads while this one runs.
+			_ => unsafe { self.field(set, j).get((r - 3) * s..(r + 4) * s) },
+		};
+		// SAFETY: the CPML's memory outlives the step; no other unit touches psi of y of row `q` while this one runs.
+		let line = unsafe { memory.psi_y.get_mut(k * gw..(k + 1) * gw) };
 		rim.tables.psi_y_line(q, field, self.cuts, &memory.pass.xs, line);
 	}
 
@@ -545,32 +712,54 @@ impl Step<'_> {
 
 	/// The 4th order's `W(q, j)` on a row of the area: `w = c2 L u` from the field of level `j - 1`, with the rim's
 	/// first application (`delta_y` and the x part), then the forcing of sub-step `j - 1` on its driven cells.
+	///
+	/// A band writes `w` into its ring, and the rows a seam's units read to the plane too; a seam into the plane.
 	#[inline(always)]
-	fn lap(&self, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+	fn lap(&self, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let Line::Drp(line, w) = &self.line else { return };
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
-		// SAFETY: the planes and `w` outlive the step. The tiling runs no unit writing the field of level `j - 1`
-		// within 3 rows of `q` while this one runs, and no other unit touches row `q` of `w`.
-		let (u, out) =
-			unsafe { (self.planes[(j - 1) % 2].get((r - 3) * s..(r + 4) * s), w.get_mut(r * s..(r + 1) * s)) };
+		let Lane { scratch, ring } = lane;
+		// SAFETY: the planes outlive the step; the tiling runs no unit writing the field of level `j - 1` within 3 rows
+		// of `q` while this one runs.
+		let u = unsafe { self.planes[(j - 1) % 2].get((r - 3) * s..(r + 4) * s) };
+		let out = match ring.as_mut() {
+			Some(ring) => ring.row_mut(q, j),
+			// SAFETY: `w` outlives the step, and no other unit touches row `q` of `w` while this one runs.
+			None => unsafe { w.get_mut(r * s..(r + 1) * s) },
+		};
 		let strip = self.delta(0, q, u);
 		let rows: Rows<'_> = std::array::from_fn(|k| &u[k * s..][..s]);
 		line.lap(r, &rows, &mut out[PAD..][..gw]);
 		self.x_part(0, q, &u[2 * s..5 * s], strip, &mut out[PAD..][..gw], scratch);
 		self.force_w(q, j, out);
+		if let Some(ring) = ring.as_mut()
+			&& ring.written(q, j)
+		{
+			let slot = ring.slot(q, j);
+			// SAFETY: `w` outlives the step. In the band phase each band's `W` units write only their own rows of
+			// the plane, which no other band's touch, and nothing reads it.
+			unsafe { w.get_mut(r * s..(r + 1) * s) }.copy_from_slice(&ring.rows[slot]);
+		}
 	}
 
 	/// The 4th order's update of row `q` of the area to level `j` from `w`: `delta_y` of the rim's second application,
 	/// the outer update (the intensity stages on level `n`), the x part.
+	///
+	/// A band takes `w` from its ring, a seam from the plane.
 	#[inline(always)]
-	fn outer(&self, line: &DrpLine<'_>, w: Shared, q: usize, j: usize, scratch: &mut Option<XScratch>) {
+	fn outer(&self, line: &DrpLine<'_>, w: Shared, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
-		// SAFETY: the planes and `w` outlive the step. The tiling runs no unit writing `w` within 3 rows of `q` or row
-		// `q` of the field of level `j - 1` while this one runs, and no other unit touches row `q` of level `j`'s
-		// plane.
-		let (wr, u, next) =
-			unsafe { (w.get((r - 3) * s..(r + 4) * s), src.get(r * s..(r + 1) * s), dst.get_mut(r * s..(r + 1) * s)) };
+		let Lane { scratch, ring } = lane;
+		let wr = match ring.as_mut() {
+			Some(ring) => ring.rows(q, j, &self.area),
+			// SAFETY: `w` outlives the step; the tiling runs no unit writing `w` within 3 rows of `q` while this one
+			// runs.
+			None => unsafe { w.get((r - 3) * s..(r + 4) * s) },
+		};
+		// SAFETY: the planes outlive the step. The tiling runs no unit writing row `q` of the field of level `j - 1`
+		// while this one runs, and no other unit touches row `q` of level `j`'s plane.
+		let (u, next) = unsafe { (src.get(r * s..(r + 1) * s), dst.get_mut(r * s..(r + 1) * s)) };
 		let strip = self.delta(1, q, wr);
 		// SAFETY: this is the update of row `q` to level `j`, which the tiling runs once and alone on the row.
 		let mut stages = unsafe { self.row_stages(q, j) };
@@ -683,6 +872,10 @@ mod tests {
 		assert_eq!(shrinks(&nine, 0), vec![0, 4, 8, 12]);
 		let drp = Tiling::new(4, TimeScheme::ModifiedEquation, false);
 		assert_eq!((drp.lag, shrinks(&drp, 0), shrinks(&drp, 1)), (6, vec![0, 6, 12, 18], vec![3, 9, 15, 21]));
+		// `w` lives from `W(q)` at offset 3 to `D(q + 3)` at offset 0: 7 slots. The seams read `w` `s_D + 3` rows into
+		// a band.
+		assert_eq!(drp.ring, Some(RingShape { slots: 7, span: 3, seam: vec![6, 12, 18, 24] }));
+		assert!(nine.ring.is_none());
 		let drp = Tiling::new(4, TimeScheme::ModifiedEquation, true);
 		assert_eq!(drp.lag, 8);
 		let offsets: Vec<usize> = drp.kinds.iter().map(|k| k.offset).collect();
@@ -692,5 +885,8 @@ mod tests {
 		assert_eq!(shrinks(&drp, 2), vec![4, 12, 20, 28]);
 		assert_eq!(shrinks(&drp, 3), vec![6, 14, 22, 30], "sd(j) = 8 j - 2");
 		assert_eq!(drp.min_band(), 2 * 30 + 3);
+		// `W` at offset 4, `D` reading 3 rows on at 0: 8 slots. The seams read `w` `s_D + 3` rows into a band, 7 past
+		// `s_W`.
+		assert_eq!(drp.ring, Some(RingShape { slots: 8, span: 3, seam: vec![9, 17, 25, 33] }));
 	}
 }

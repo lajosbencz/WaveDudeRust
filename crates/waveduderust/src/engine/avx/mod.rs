@@ -29,11 +29,13 @@
 //!
 //! - The 4th order: a level is two units per row, `W(q, j)`, `w = c2 L u` of the field of level `j - 1` (with the
 //!   rim's first application and the forcing), and `D(q, j)`, the outer update from `w` (with the rim's second
-//!   application). `w` lives in the plane `w`, one row per grid row for all levels: `W(q, j)` overwrites `w` of level
-//!   `j - 1`, whose readers, the `D` units within 3 rows, have run once the field rows `W(q, j)` reads are ready, so
-//!   the plane costs no lag; its rows are still in the cache when the `D` units read them, and it keeps the rows the
-//!   band phase writes at a trapezoid's edge for the seams' units (below), which a ring of rows per level would have
-//!   to set aside. The price is the plane's write-back, one more plane per step.
+//!   application). In a band (below) `w` lives in a ring of rows per level, as many slots as rows of `w` the sweep
+//!   holds at once (from `W` writing a row to the last `D` reading it: 7, 8 with a rim, derived by the tiling), so it
+//!   stays in the cache and makes no trip through memory. The band also writes to the plane `w` the rows a seam's
+//!   units read at the trapezoid's edge, a few rows per level and side (disjoint across levels), after the forcing
+//!   and the rim's first application have completed them; the seams' units take `w` from the plane and write it there.
+//!   `W(q, j)` overwrites row `q` of the plane at level `j - 1`, whose readers, the `D` units within 3 rows, have run
+//!   once the field rows `W(q, j)` reads are ready, so the plane costs no lag.
 //!
 //! - In place: level `j` is written over level `j - 2` in the plane of `j`'s parity (`u` holds the even levels, `prev`
 //!   the odd ones, and the planes swap after an odd `n`), so a row may advance only once the rows that read its older
@@ -85,7 +87,7 @@ use std::sync::Arc;
 use rayon::iter::Either;
 use rayon::prelude::*;
 
-use self::blocked::{Line, MurRows, Rim, RimSet, Shared, Step, Tiling};
+use self::blocked::{Line, MurRows, Rim, RimSet, Rings, Shared, Step, Tiling};
 use self::kernels::{Intensity, NineRow, RowKernels, RowMedium, advance};
 use super::cpu::{Rows, UniformRuns, chunks_or_none, cut_spans, drp, medium_spans, nine_point, plane_rows, row_cuts};
 use super::damage::{Damage, extent};
@@ -115,6 +117,8 @@ pub struct AvxEngine {
 	driven: Vec<(usize, u32, u32)>,
 	/// The last blocked step's tiling, kept for the next.
 	tiling: Option<Tiling>,
+	/// The 4th order's rings of `w` rows of a blocked step's bands, kept for the next (blocked.rs).
+	rings: Rings,
 }
 
 impl AvxEngine {
@@ -142,6 +146,7 @@ impl AvxEngine {
 			tables: Vec::new(),
 			driven: Vec::new(),
 			tiling: None,
+			rings: Rings::default(),
 		};
 		engine.scene_loaded();
 		engine
@@ -290,7 +295,7 @@ impl AvxEngine {
 			mur: &self.mur,
 			rim,
 		};
-		step.run(&tiling, BANDS_PER_THREAD * rayon::current_num_threads());
+		step.run(&tiling, BANDS_PER_THREAD * rayon::current_num_threads(), &mut self.rings);
 		self.tiling = Some(tiling);
 		if n % 2 == 1 {
 			std::mem::swap(&mut h.u, &mut h.prev);

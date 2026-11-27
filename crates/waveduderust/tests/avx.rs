@@ -417,3 +417,57 @@ fn short_grids_agree() {
 		}
 	});
 }
+
+/// Sources on every row of a column, so some lie within 3 rows of each seam between the blocked step's bands, on a grid
+/// whose rim's y strips take most of its rows, so seams cross them too (engine/avx, Blocked steps: the 4th order's
+/// bands keep `w` in rings and leave the seams' rows of it in the plane).
+#[test]
+fn sources_and_strips_on_seams_agree() {
+	if !avx_available() {
+		return;
+	}
+	on_seams(|| {
+		let (h, rim) = (48, 40);
+		let sources: Vec<Emitter> = (0..h as i32)
+			.map(|y| Emitter { pulsed: y % 3 == 0, phase_radians: 0.1 * f64::from(y), ..emitter(64, y, 40.0) })
+			.collect();
+		for (edges, damping_edge) in [(Edges::Open, -rim), (Edges::Reflective, 0), (Edges::Open, 0)] {
+			let settings = Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
+			let build = || SceneData::from_pixels(&pixels(100)[..(W * h * 4) as usize], W, h, &settings);
+			for (stencil, n) in STENCILS.into_iter().flat_map(|stencil| [None, Some(3)].map(|n| (stencil, n))) {
+				let what = format!("{stencil:?} {edges:?} damping edge {damping_edge}, {n:?} sub-steps");
+				let mut trio = Trio::on(build, stencil, n, what, &sources);
+				for step in 1..=60 {
+					trio.run(1);
+					if step % 10 == 0 {
+						trio.check(&format!("step {step}"));
+					}
+				}
+			}
+		}
+	});
+}
+
+/// Grids about as high as one, two and three of the 4th order's bands at their fewest rows, with and without a rim.
+#[test]
+fn grids_near_the_fewest_rows_of_a_band_agree() {
+	if !avx_available() {
+		return;
+	}
+	on_seams(|| {
+		for (edges, damping_edge) in [(Edges::Open, -RIM), (Edges::Open, 0)] {
+			let settings = Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
+			for h in [20, 21, 22, 31, 32, 42, 43, 47, 48, 63, 64, 66, 94] {
+				let build = || SceneData::from_pixels(&pixels(100)[..(W * h * 4) as usize], W, h, &settings);
+				let sources =
+					[emitter(30, 0, 100.0), emitter(70, h as i32 / 2, 90.0), emitter(100, h as i32 - 1, 80.0)];
+				for n in [2, 3] {
+					let what = format!("{edges:?} damping edge {damping_edge}, {h} rows, {n} sub-steps");
+					let mut trio = Trio::on(build, Stencil::FourthOrder, Some(n), what, &sources);
+					trio.run(60);
+					trio.check("step 60");
+				}
+			}
+		}
+	});
+}
