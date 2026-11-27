@@ -497,7 +497,7 @@ export component SourceForm inherits VerticalLayout {
             FormLabel { text: @tr("Pulse width"); tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only."); }
             FormInt {
                 value <=> Form.source.pulse-width;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.positive;
                 enabled: root.pulsed;
                 tip: @tr("Length of each burst in cycles of the source frequency; pulsed mode only.");
             }
@@ -506,7 +506,7 @@ export component SourceForm inherits VerticalLayout {
             FormLabel { text: @tr("Off width"); tip: @tr("Length of the gap between bursts in cycles; pulsed mode only."); }
             FormInt {
                 value <=> Form.source.off-width;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.positive;
                 enabled: root.pulsed;
                 tip: @tr("Length of the gap between bursts in cycles; pulsed mode only.");
             }
@@ -538,7 +538,7 @@ export component SourceForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.array.size-x;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.positive;
                 enabled: root.composite;
                 tip: @tr("Number of emitters across. Odd counts keep the centre emitter on the source position.");
             }
@@ -547,7 +547,7 @@ export component SourceForm inherits VerticalLayout {
             FormLabel { text: @tr("Rows"); tip: @tr("Number of emitters down."); }
             FormInt {
                 value <=> Form.array.size-y;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.positive;
                 enabled: root.composite;
                 tip: @tr("Number of emitters down.");
             }
@@ -1199,7 +1199,7 @@ component LensShape inherits VerticalLayout {
             FormLabel { text: @tr("Centre thickness"); tip: @tr("Distance between the two surfaces on the axis in pixels."); }
             FormInt {
                 value <=> Form.lens.thickness;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: -1 };
+                spec: Specs.positive;
                 tip: @tr("Distance between the two surfaces on the axis in pixels.");
             }
         }
@@ -1327,7 +1327,7 @@ export component DiffuserForm inherits VerticalLayout {
             FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels: the width of the rough face."); }
             FormInt {
                 value <=> Form.diffuser.width;
-                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.width;
                 tip: @tr("Extent across the axis in pixels: the width of the rough face.");
             }
         }
@@ -1432,7 +1432,7 @@ export component ZonePlateForm inherits VerticalLayout {
             FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels; the zones fill it."); }
             FormInt {
                 value <=> Form.zone-plate.diameter;
-                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.width;
                 tip: @tr("Extent across the axis in pixels; the zones fill it.");
             }
         }
@@ -1443,7 +1443,7 @@ export component ZonePlateForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.zone-plate.thickness;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                spec: Specs.whole;
                 tip: @tr("Extent along the axis in pixels: the depth of the blocks. It should leave room for the anti-reflection rise on both faces.");
             }
         }
@@ -1516,7 +1516,7 @@ export component BraggReflectorForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.bragg.thickness1;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                spec: Specs.whole;
                 tip: @tr("Thickness of the first layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
             }
         }
@@ -1535,7 +1535,7 @@ export component BraggReflectorForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.bragg.thickness2;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                spec: Specs.whole;
                 tip: @tr("Thickness of the second layer of each pair in pixels. A quarter-wave layer is \u{3BB} / (4 n) pixels thick.");
             }
         }
@@ -1552,7 +1552,7 @@ export component BraggReflectorForm inherits VerticalLayout {
     FormPanel {
         Row {
             FormLabel { text: @tr("Width"); tip: @tr("Extent of the stack across the axis in pixels."); }
-            FormInt { value <=> Form.bragg.width; spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent of the stack across the axis in pixels."); }
+            FormInt { value <=> Form.bragg.width; spec: Specs.width; tip: @tr("Extent of the stack across the axis in pixels."); }
         }
     }
 }
@@ -1592,7 +1592,7 @@ export component GrinLensForm inherits VerticalLayout {
         }
         Row {
             FormLabel { text: @tr("Diameter"); tip: @tr("Extent across the axis in pixels."); }
-            FormInt { value <=> Form.grin.diameter; spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 }; tip: @tr("Extent across the axis in pixels."); }
+            FormInt { value <=> Form.grin.diameter; spec: Specs.width; tip: @tr("Extent across the axis in pixels."); }
         }
     }
 }
@@ -1612,7 +1612,7 @@ export component SimpleGratingForm inherits VerticalLayout {
             }
             FormInt {
                 value <=> Form.grating.columns;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                spec: Specs.whole;
                 tip: @tr("Number of dots along the axis. Odd counts keep the middle dot on the part's position; one column is a line grating across the axis.");
             }
         }
@@ -1620,7 +1620,7 @@ export component SimpleGratingForm inherits VerticalLayout {
             FormLabel { text: @tr("Rows"); tip: @tr("Number of dots across the axis. Odd counts keep the middle dot on the part's position."); }
             FormInt {
                 value <=> Form.grating.rows;
-                spec: { min: 1, max: 1000000000, increment: 1, decimals: 0 };
+                spec: Specs.whole;
                 tip: @tr("Number of dots across the axis. Odd counts keep the middle dot on the part's position.");
             }
         }
@@ -1680,7 +1680,7 @@ export component FacettedGratingForm inherits VerticalLayout {
             FormLabel { text: @tr("Width"); tip: @tr("Extent across the axis in pixels: the width of the facetted face."); }
             FormInt {
                 value <=> Form.facets.width;
-                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.width;
                 tip: @tr("Extent across the axis in pixels: the width of the facetted face.");
             }
         }
@@ -1754,7 +1754,7 @@ export component MetaSurfaceForm inherits VerticalLayout {
             FormLabel { text: @tr("Width"); tip: @tr("Width of the plate and its pattern across the axis in pixels."); }
             FormInt {
                 value <=> Form.meta.width;
-                spec: { min: 2, max: 1000000000, increment: 10, decimals: 0 };
+                spec: Specs.width;
                 tip: @tr("Width of the plate and its pattern across the axis in pixels.");
             }
         }
