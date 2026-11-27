@@ -6,7 +6,7 @@ import { Overlay } from "overlay.slint";
 export enum Message { none, crashed, save-changes, discard-frames, export-running, scene-image, replace-it, replace-them, open-failed, save-failed, export-failed, run-failed, storage-full, export-ready }
 
 // A message and the one value its text names: a file's name or path, or the version.
-export struct Modal {
+export struct ModalData {
     message: Message,
     arg: string,
 }
@@ -19,35 +19,39 @@ struct Choice {
     answer: Answer,
 }
 
+// The message box's message and answer, filled and served by Rust.
+export global Modal {
+    in property <ModalData> data;
+    callback answer(answer: Answer);
+}
+
 // The app's own message window (docs/ui/70, Message window), modal over the main window.
 export component ModalLayer inherits Overlay {
-    in property <Modal> modal;
-    callback answer(Answer);
 
     // a destructive question: No is the default
-    property <bool> confirms: modal.message == Message.discard-frames || modal.message == Message.export-running
-        || modal.message == Message.replace-it || modal.message == Message.replace-them;
-    property <bool> asks: modal.message == Message.save-changes || root.confirms;
-    property <bool> fails: modal.message == Message.crashed || modal.message == Message.open-failed || modal.message == Message.save-failed || modal.message == Message.export-failed
-        || modal.message == Message.run-failed || modal.message == Message.storage-full;
+    property <bool> confirms: Modal.data.message == Message.discard-frames || Modal.data.message == Message.export-running
+        || Modal.data.message == Message.replace-it || Modal.data.message == Message.replace-them;
+    property <bool> asks: Modal.data.message == Message.save-changes || root.confirms;
+    property <bool> fails: Modal.data.message == Message.crashed || Modal.data.message == Message.open-failed || Modal.data.message == Message.save-failed || Modal.data.message == Message.export-failed
+        || Modal.data.message == Message.run-failed || Modal.data.message == Message.storage-full;
     // the scene image file changed: Load file is the default
-    property <bool> reloads: modal.message == Message.scene-image;
+    property <bool> reloads: Modal.data.message == Message.scene-image;
     // a browser export's file: Download is the default, it starts from the user's click (decision 0025)
-    property <bool> offers: modal.message == Message.export-ready;
+    property <bool> offers: Modal.data.message == Message.export-ready;
     // the button Enter presses
-    property <int> default: root.confirms || modal.message == Message.crashed ? 1 : 0;
-    property <[Choice]> choices: modal.message == Message.crashed ? [{ text: @tr("Copy path"), answer: Answer.copy }, { text: @tr("OK"), answer: Answer.ok }]
+    property <int> default: root.confirms || Modal.data.message == Message.crashed ? 1 : 0;
+    property <[Choice]> choices: Modal.data.message == Message.crashed ? [{ text: @tr("Copy path"), answer: Answer.copy }, { text: @tr("OK"), answer: Answer.ok }]
         : root.reloads ? [{ text: @tr("Load file"), answer: Answer.yes }, { text: @tr("Keep embedded"), answer: Answer.no }]
         : root.offers ? [{ text: @tr("Download"), answer: Answer.download }, { text: @tr("Close"), answer: Answer.cancel }]
         : root.confirms ? [{ text: @tr("Yes"), answer: Answer.yes }, { text: @tr("No"), answer: Answer.no }]
         : root.asks ? [{ text: @tr("Save"), answer: Answer.save }, { text: @tr("Don't save"), answer: Answer.discard }, { text: @tr("Cancel"), answer: Answer.cancel }]
         : [{ text: @tr("OK"), answer: Answer.ok }];
 
-    visible: modal.message != Message.none;
+    visible: Modal.data.message != Message.none;
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.answer(root.confirms || root.reloads ? Answer.no : root.asks || root.offers ? Answer.cancel : Answer.ok); return accept; }
-            if (e.text == Key.Return) { root.answer(root.choices[root.default].answer); return accept; }
+            if (e.text == Key.Escape) { Modal.answer(root.confirms || root.reloads ? Answer.no : root.asks || root.offers ? Answer.cancel : Answer.ok); return accept; }
+            if (e.text == Key.Return) { Modal.answer(root.choices[root.default].answer); return accept; }
             reject
         }
     }
@@ -80,19 +84,19 @@ export component ModalLayer inherits Overlay {
                     }
                 }
                 Text {
-                    text: modal.message == Message.save-changes ? @tr("Save the changes to {}?", modal.arg)
-                        : modal.message == Message.discard-frames ? @tr("Discard the frames of the run?")
-                        : modal.message == Message.export-running ? @tr("An export is running. Stop it and quit?")
-                        : modal.message == Message.replace-it ? @tr("'{}' exists. Replace it?", modal.arg)
-                        : modal.message == Message.replace-them ? @tr("The folder {} exists and holds files. Replace them?", modal.arg)
-                        : modal.message == Message.scene-image ? @tr("The scene image file '{}' differs from the image embedded in the project. Load the file?", modal.arg)
-                        : modal.message == Message.crashed ? @tr("WaveDude Rust hit an internal error in the last session. The report, to attach to a bug report:\n{}", modal.arg)
-                        : modal.message == Message.open-failed ? @tr("Could not open '{}'.", modal.arg)
-                        : modal.message == Message.save-failed ? @tr("Could not save '{}'.", modal.arg)
-                        : modal.message == Message.export-failed ? @tr("The export failed.")
-                        : modal.message == Message.export-ready ? @tr("The export is ready: {}", modal.arg)
-                        : modal.message == Message.run-failed ? @tr("The simulation failed: {}", modal.arg)
-                        : modal.message == Message.storage-full ? @tr("The simulation failed: {}\nThe storage is full. Close other WaveDude Rust tabs or free disk space, then try again.", modal.arg)
+                    text: Modal.data.message == Message.save-changes ? @tr("Save the changes to {}?", Modal.data.arg)
+                        : Modal.data.message == Message.discard-frames ? @tr("Discard the frames of the run?")
+                        : Modal.data.message == Message.export-running ? @tr("An export is running. Stop it and quit?")
+                        : Modal.data.message == Message.replace-it ? @tr("'{}' exists. Replace it?", Modal.data.arg)
+                        : Modal.data.message == Message.replace-them ? @tr("The folder {} exists and holds files. Replace them?", Modal.data.arg)
+                        : Modal.data.message == Message.scene-image ? @tr("The scene image file '{}' differs from the image embedded in the project. Load the file?", Modal.data.arg)
+                        : Modal.data.message == Message.crashed ? @tr("WaveDude Rust hit an internal error in the last session. The report, to attach to a bug report:\n{}", Modal.data.arg)
+                        : Modal.data.message == Message.open-failed ? @tr("Could not open '{}'.", Modal.data.arg)
+                        : Modal.data.message == Message.save-failed ? @tr("Could not save '{}'.", Modal.data.arg)
+                        : Modal.data.message == Message.export-failed ? @tr("The export failed.")
+                        : Modal.data.message == Message.export-ready ? @tr("The export is ready: {}", Modal.data.arg)
+                        : Modal.data.message == Message.run-failed ? @tr("The simulation failed: {}", Modal.data.arg)
+                        : Modal.data.message == Message.storage-full ? @tr("The simulation failed: {}\nThe storage is full. Close other WaveDude Rust tabs or free disk space, then try again.", Modal.data.arg)
                         : "";
                     wrap: word-wrap;
                     color: Theme.text;
@@ -105,7 +109,7 @@ export component ModalLayer inherits Overlay {
                 for choice[i] in root.choices: Button {
                     text: choice.text;
                     primary: i == root.default;
-                    clicked => { root.answer(choice.answer); }
+                    clicked => { Modal.answer(choice.answer); }
                 }
             }
         }

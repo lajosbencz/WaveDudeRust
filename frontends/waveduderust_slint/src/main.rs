@@ -178,7 +178,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		}
 		Command::Welcome => {
 			show_settings(state, app);
-			app.set_welcome_shown(true);
+			app.global::<ui::Welcome<'_>>().set_shown(true);
 		}
 		Command::RandomExample => {
 			let nanos =
@@ -187,7 +187,7 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		}
 		Command::Examples => {
 			show_examples(state, app);
-			app.set_examples_shown(true);
+			app.global::<ui::Examples<'_>>().set_shown(true);
 		}
 		Command::New | Command::Close => {
 			state.playback.reset();
@@ -230,8 +230,8 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 						export::Dialog::open(kind, &state.doc, &name, state.playback.position, &state.settings, &words);
 					if let Some((dialog, data)) = opened {
 						state.export_dialog = Some(dialog);
-						app.set_export_data(data);
-						app.set_export_shown(true);
+						app.global::<ui::Export<'_>>().set_data(data);
+						app.global::<ui::Export<'_>>().set_shown(true);
 					}
 				}
 				// Export last repeats the outputs and asks nothing
@@ -244,11 +244,11 @@ fn act(state: &mut State, app: &AppWindow, action: Action) {
 		}
 		Command::Settings => {
 			show_settings(state, app);
-			app.set_settings_shown(true);
+			app.global::<ui::Settings<'_>>().set_shown(true);
 		}
 		Command::About => {
-			app.set_about(about(state));
-			app.set_about_shown(true);
+			app.global::<ui::About<'_>>().set_data(about(state));
+			app.global::<ui::About<'_>>().set_shown(true);
 		}
 		Command::Undo => {
 			state.doc.undo();
@@ -409,8 +409,8 @@ fn show_examples(state: &mut State, app: &AppWindow) {
 			description: examples::all()[i].description.as_str().into(),
 		})
 		.collect();
-	app.set_example_topic(state.example_topic);
-	app.set_example_rows(ModelRc::new(VecModel::from(rows)));
+	app.global::<ui::Examples<'_>>().set_topic(state.example_topic);
+	app.global::<ui::Examples<'_>>().set_rows(ModelRc::new(VecModel::from(rows)));
 }
 
 /// A file dropped on the window: an image becomes the scene image, a project opens (after the unsaved check).
@@ -462,8 +462,8 @@ fn watch_scene_image(state: &mut State, app: &AppWindow) {
 	use scene_watch::Event;
 	let folder = state.doc.path.as_deref().and_then(std::path::Path::parent);
 	match state.scene_watch.tick(&state.doc.project.scene, folder) {
-		Some(Event::Withdraw) if app.get_modal().message == ui::Message::SceneImage => {
-			app.set_modal(ui::Modal::default());
+		Some(Event::Withdraw) if app.global::<ui::Modal<'_>>().get_data().message == ui::Message::SceneImage => {
+			app.global::<ui::Modal<'_>>().set_data(ui::ModalData::default());
 		}
 		Some(Event::Take(bytes, size)) => {
 			state.doc.settle(|p| (p.scene.image_data, p.scene.image_size) = (Some(bytes.clone()), size));
@@ -471,7 +471,7 @@ fn watch_scene_image(state: &mut State, app: &AppWindow) {
 		}
 		_ => {}
 	}
-	if state.scene_watch.asking() && app.get_modal().message == ui::Message::None {
+	if state.scene_watch.asking() && app.global::<ui::Modal<'_>>().get_data().message == ui::Message::None {
 		tell(app, ui::Message::SceneImage, &state.doc.project.scene.image);
 	}
 }
@@ -542,7 +542,7 @@ fn answer_warning(state: &mut State, app: &AppWindow, answer: ui::WarningAnswer,
 	let Some(ticks) = state.warning_ticks.take() else { return };
 	let quality = state.live.warning().map(|(_, w)| w.quality_of(ticks));
 	let Some(ask) = state.live.take_ask() else { return };
-	app.set_memory_warning_shown(false);
+	app.global::<ui::MemoryWarning<'_>>().set_shown(false);
 	if mute {
 		state.settings.warn_when_ram_insufficient = false;
 	}
@@ -617,11 +617,11 @@ fn ram_bar(state: &State) -> ui::RamBar {
 /// Pushes the settings to the Settings window and the Welcome page.
 fn show_settings(state: &State, app: &AppWindow) {
 	let data = settings::data(&state.settings);
-	app.set_ram(ram_bar(state));
-	app.set_settings(data);
-	app.set_undo_spec(settings::undo_spec());
-	app.set_welcome_levers(settings::levers(&state.settings));
-	app.set_welcome_show_startup(state.settings.show_startup);
+	app.global::<ui::Ram<'_>>().set_bar(ram_bar(state));
+	app.global::<ui::Settings<'_>>().set_data(data);
+	app.global::<ui::Settings<'_>>().set_undo_spec(settings::undo_spec());
+	app.global::<ui::Welcome<'_>>().set_levers(settings::levers(&state.settings));
+	app.global::<ui::Welcome<'_>>().set_show_startup(state.settings.show_startup);
 }
 
 /// The project's file name, an untitled one's in the UI's language.
@@ -631,7 +631,7 @@ fn file_name(state: &State, app: &AppWindow) -> String {
 
 /// Starts the export of `plan` from the live run, or waits for the run it needs (decision 0012).
 fn begin_export(state: &mut State, app: &AppWindow, plan: &export::Plan) {
-	app.set_export_shown(false);
+	app.global::<ui::Export<'_>>().set_shown(false);
 	state.export_dialog = None;
 	let needs = plan.needs(&state.doc.view);
 	match state.live.request_export(&state.doc.project, &state.doc.view, needs) {
@@ -695,7 +695,7 @@ fn ask_replace(state: &mut State, app: &AppWindow) {
 
 /// Shows `message`, `arg` the value its text names.
 fn tell(app: &AppWindow, message: ui::Message, arg: &str) {
-	app.set_modal(ui::Modal { message, arg: arg.into() });
+	app.global::<ui::Modal<'_>>().set_data(ui::ModalData { message, arg: arg.into() });
 }
 
 /// Where Save writes: the project's file, asked for when it has none, or a file asked for (Save As).
@@ -750,9 +750,9 @@ fn save(state: &mut State, app: &AppWindow, to: SaveTo) -> bool {
 
 /// The answer to the message window: for the unsaved edits prompt, Save, Don't save or Cancel.
 fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
-	let modal = app.get_modal();
+	let modal = app.global::<ui::Modal<'_>>().get_data();
 	let message = modal.message;
-	app.set_modal(ui::Modal::default());
+	app.global::<ui::Modal<'_>>().set_data(ui::ModalData::default());
 	match (message, answer) {
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, ui::Answer::Yes) => ask_replace(state, app),
 		(ui::Message::ReplaceIt | ui::Message::ReplaceThem, _) => state.replacing = None,
@@ -761,7 +761,7 @@ fn answer(state: &mut State, app: &AppWindow, answer: ui::Answer) {
 				tracing::error!("{e}");
 			}
 			// the window stays
-			app.set_modal(modal);
+			app.global::<ui::Modal<'_>>().set_data(modal);
 		}
 		(ui::Message::SceneImage, answer) => {
 			if let Some((bytes, size)) = state.scene_watch.answer(answer == ui::Answer::Yes) {
@@ -993,7 +993,7 @@ async fn start() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	if crashed.is_none() && state.borrow().settings.show_startup && std::env::args_os().nth(1).is_none() {
 		show_settings(&state.borrow(), &app);
-		app.set_welcome_shown(true);
+		app.global::<ui::Welcome<'_>>().set_shown(true);
 	}
 	#[cfg(not(target_arch = "wasm32"))]
 	if let Some(path) = std::env::args_os().nth(1) {
@@ -1066,9 +1066,9 @@ fn tick(s: &mut State, app: &AppWindow) -> bool {
 	// the browser's late answers: the H.264 profiles it encodes, its session for the spool
 	#[cfg(target_arch = "wasm32")]
 	if let Some(dialog) = &s.export_dialog {
-		let mut data = app.get_export_data();
+		let mut data = app.global::<ui::Export<'_>>().get_data();
 		if dialog.refresh(&mut data) {
-			app.set_export_data(data);
+			app.global::<ui::Export<'_>>().set_data(data);
 		}
 	}
 	if let Some(e) = &mut s.exporting {
@@ -1260,8 +1260,8 @@ fn export_probe_csv(state: &mut State, app: &AppWindow, i: usize) {
 	{
 		let (dialog, data) = export::Dialog::csv(&probe.name, csv, &app.global::<ui::Words<'_>>());
 		state.export_dialog = Some(dialog);
-		app.set_export_data(data);
-		app.set_export_shown(true);
+		app.global::<ui::Export<'_>>().set_data(data);
+		app.global::<ui::Export<'_>>().set_shown(true);
 	}
 }
 

@@ -24,25 +24,25 @@ import { Canvas } from "canvas.slint";
 import { Timeline, TransportBar, Playback, Transport, Bracket } from "timeline.slint";
 import { StatusBar } from "status.slint";
 import { Messages, Log, LogRow, LogLevel, LevelToggle } from "messages.slint";
-import { ModalLayer, Modal, Message, Answer } from "modal.slint";
-import { MemoryWarningLayer, MemoryWarningData, WarningAnswer } from "memory-warning.slint";
-import { AboutLayer, AboutData } from "about.slint";
-import { ExportLayer, ExportData, ExportReason } from "export-dialog.slint";
-export { ExportData, ExportReason }
-import { SettingsLayer, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
-export { SettingsData, ColorTheme, Language, Scale, Search }
-import { WelcomeLayer, Levers } from "welcome.slint";
-import { RamBar, RamBarView } from "ram-bar.slint";
-export { Levers }
-import { ExamplesLayer, ExampleRow, ExampleTopic } from "examples.slint";
+import { ModalLayer, Modal, ModalData, Message, Answer } from "modal.slint";
+import { MemoryWarningLayer, MemoryWarning, MemoryWarningData, WarningTicks, WarningAnswer } from "memory-warning.slint";
+import { AboutLayer, About, AboutData } from "about.slint";
+import { ExportLayer, Export, ExportData, ExportReason } from "export-dialog.slint";
+export { Export, ExportData, ExportReason }
+import { SettingsLayer, Settings, SettingsData, ColorTheme, Language, Scale, Search } from "settings.slint";
+export { Settings, SettingsData, ColorTheme, Language, Scale, Search }
+import { WelcomeLayer, Welcome, Levers } from "welcome.slint";
+import { Ram, RamBar, RamBarView } from "ram-bar.slint";
+export { Welcome, Levers, Ram, RamBar }
+import { ExamplesLayer, Examples, ExampleRow, ExampleTopic } from "examples.slint";
 
 import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
 export { Command, Commands, Mine, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
-export { MemoryWarningData, WarningAnswer, AboutData }
-export { Theme, TreeRow, TreeKind, Transport, Bracket, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
+export { MemoryWarning, MemoryWarningData, WarningTicks, WarningAnswer, About, AboutData }
+export { Theme, TreeRow, TreeKind, Transport, Bracket, LogRow, LogLevel, LevelToggle, Modal, ModalData, Message, Answer, Examples, ExampleRow, ExampleTopic }
 
 
 // A pane's content at its place in the dock, cut off below its content's size as Next's grid cells do.
@@ -77,42 +77,6 @@ export component AppWindow inherits Window {
     in property <bool> native-access-keys;
     // Newest first, full paths.
     in property <[string]> recent-files;
-    in property <Modal> modal;
-    in-out property <bool> examples-shown;
-    in property <ExampleTopic> example-topic;
-    in property <[ExampleRow]> example-rows;
-    callback example-topic-picked(ExampleTopic);
-    callback example-search(string);
-    callback example-open(int);
-    in-out property <bool> welcome-shown;
-    // the memory, refreshed by `ram-refresh` while a view of it is shown
-    in property <RamBar> ram;
-    callback ram-refresh();
-    in property <Levers> welcome-levers;
-    in property <bool> welcome-show-startup;
-    callback welcome-preset(PreviewQuality);
-    callback welcome-show-startup-toggled(bool);
-    in-out property <bool> settings-shown;
-    in-out property <SettingsData> settings;
-    in property <NumberSpec> undo-spec;
-    callback settings-edited();
-    callback modal-answer(Answer);
-    in-out property <bool> about-shown;
-    in property <AboutData> about;
-    callback about-copy();
-    callback about-link(string);
-    in-out property <bool> export-shown;
-    in-out property <ExportData> export-data;
-    callback export-format(index: int);
-    callback export-browse();
-    callback export-browse-archive();
-    callback export-ok();
-    callback export-delete-codec();
-    callback export-path-edited();
-    in property <bool> memory-warning-shown;
-    in property <MemoryWarningData> memory-warning;
-    callback memory-warning-ticked(bool, bool, bool, bool);
-    callback memory-warning-answer(WarningAnswer, bool);
     // the dock's size and place in the window, and whether a pane is being dragged
     out property <length> dock-width: dock.width;
     out property <length> dock-height: dock.height;
@@ -131,8 +95,8 @@ export component AppWindow inherits Window {
     property <keys> no-keys;
     // the recent file at an index of `recent-files`
     callback open-recent(int);
-    property <bool> overlay-open: root.welcome-shown || root.examples-shown || root.settings-shown || root.export-shown
-        || root.about-shown || root.memory-warning-shown || root.modal.message != Message.none;
+    property <bool> overlay-open: Welcome.shown || Examples.shown || Settings.shown || Export.shown || About.shown
+        || MemoryWarning.shown || Modal.data.message != Message.none;
     // the main area takes the keys back once the last overlay closed
     changed overlay-open => {
         if (!self.overlay-open) {
@@ -331,7 +295,7 @@ export component AppWindow inherits Window {
                             place: Dock.panes.performance.place;
                             VerticalLayout {
                                 padding: 8px;
-                                RamBarView { ram: root.ram; }
+                                RamBarView { ram: Ram.bar; }
                             }
                         }
                         DockedPane {
@@ -378,62 +342,22 @@ export component AppWindow inherits Window {
         }
     }
     WelcomeLayer {
-        shown <=> root.welcome-shown;
-        levers: root.welcome-levers;
-        show-startup: root.welcome-show-startup;
-        preset(i) => { root.welcome-preset(i); }
         command(c) => {
-            root.welcome-shown = false;
+            Welcome.shown = false;
             root.command(c);
         }
-        show-startup-toggled(b) => { root.welcome-show-startup-toggled(b); }
     }
     ExamplesLayer {
-        shown <=> root.examples-shown;
-        topic: root.example-topic;
-        rows: root.example-rows;
-        pick-topic(i) => { root.example-topic-picked(i); }
-        search(t) => { root.example-search(t); }
-        open(i) => { root.example-open(i); }
         welcome => { root.command(Command.welcome); }
     }
-    SettingsLayer {
-        shown <=> root.settings-shown;
-        data <=> root.settings;
-        undo-spec: root.undo-spec;
-        ram: root.ram;
-        edited => { root.settings-edited(); }
-        preset(q) => { root.welcome-preset(q); }
-    }
+    SettingsLayer { }
     Timer {
         interval: 1s;
-        running: Dock.panes.performance.shown || root.settings-shown;
-        triggered => { root.ram-refresh(); }
+        running: Dock.panes.performance.shown || Settings.shown;
+        triggered => { Ram.refresh(); }
     }
-    ExportLayer {
-        shown <=> root.export-shown;
-        data <=> root.export-data;
-        format(i) => { root.export-format(i); }
-        browse => { root.export-browse(); }
-        browse-archive => { root.export-browse-archive(); }
-        ok => { root.export-ok(); }
-        delete-codec => { root.export-delete-codec(); }
-        path-edited => { root.export-path-edited(); }
-    }
-    AboutLayer {
-        shown <=> root.about-shown;
-        data: root.about;
-        copy => { root.about-copy(); }
-        open-link(u) => { root.about-link(u); }
-    }
-    MemoryWarningLayer {
-        shown: root.memory-warning-shown;
-        data: root.memory-warning;
-        ticked(c, r, f, s) => { root.memory-warning-ticked(c, r, f, s); }
-        answer(answer, mute) => { root.memory-warning-answer(answer, mute); }
-    }
-    ModalLayer {
-        modal: root.modal;
-        answer(i) => { root.modal-answer(i); }
-    }
+    ExportLayer { }
+    AboutLayer { }
+    MemoryWarningLayer { }
+    ModalLayer { }
 }

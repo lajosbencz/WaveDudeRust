@@ -3,7 +3,7 @@ import { Theme } from "theme.slint";
 import { NumberSpec } from "number-box.slint";
 import { FormPanel, FormLabel, IntField, Check, Choice } from "form.slint";
 import { PreviewQuality } from "commands.slint";
-import { RamBar, RamBarView } from "ram-bar.slint";
+import { Ram, RamBarView } from "ram-bar.slint";
 import { EditLine } from "edit-keys.slint";
 import { Overlay } from "overlay.slint";
 
@@ -66,13 +66,16 @@ export global Search {
     pure callback matches(text: string, query: string) -> bool;
 }
 
-export component SettingsLayer inherits Overlay {
+// The Settings dialog's data and requests, filled and served by Rust.
+export global Settings {
     in-out property <bool> shown;
     in-out property <SettingsData> data;
     in property <NumberSpec> undo-spec;
-    in property <RamBar> ram;
     callback edited();
-    callback preset(PreviewQuality);
+    callback preset(quality: PreviewQuality);
+}
+
+export component SettingsLayer inherits Overlay {
 
     property <[string]> sections: [@tr("General"), @tr("Preview and memory"), @tr("Simulation"), @tr("Updates")];
     property <int> section;
@@ -91,10 +94,10 @@ export component SettingsLayer inherits Overlay {
         root.query == "" ? root.section == i : Search.matches(root.sections[i], root.query) || Search.matches(label, root.query)
     }
 
-    visible: shown;
+    visible: Settings.shown;
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.shown = false; return accept; }
+            if (e.text == Key.Escape) { Settings.shown = false; return accept; }
             reject
         }
     }
@@ -129,7 +132,7 @@ export component SettingsLayer inherits Overlay {
                         text <=> root.query;
                         key-pressed(e) => {
                             if (e.text == Key.Escape && root.query != "") { root.query = ""; return accept; }
-                            if (e.text == Key.Escape) { root.shown = false; return accept; }
+                            if (e.text == Key.Escape) { Settings.shown = false; return accept; }
                             reject
                         }
                     }
@@ -167,90 +170,90 @@ export component SettingsLayer inherits Overlay {
                     if root.query == "" ? root.section == 0 : root.hits[0]: FormPanel {
                         if root.shows(0, @tr("Theme")): Row {
                             FormLabel { text: @tr("Theme"); }
-                            ThemeChoice { value <=> root.data.theme; committed => { root.edited(); } }
+                            ThemeChoice { value <=> Settings.data.theme; committed => { Settings.edited(); } }
                         }
                         if root.shows(0, @tr("Language")): Row {
                             FormLabel { text: @tr("Language"); }
-                            LanguageChoice { value <=> root.data.language; committed => { root.edited(); } }
+                            LanguageChoice { value <=> Settings.data.language; committed => { Settings.edited(); } }
                         }
                         if root.shows(0, @tr("Full path in the title")): Row {
-                            Check { colspan: 2; text: @tr("Full path in the title"); checked <=> root.data.title-full-path; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Full path in the title"); checked <=> Settings.data.title-full-path; committed => { Settings.edited(); } }
                         }
                         if root.shows(0, @tr("Show the welcome page at each launch")): Row {
-                            Check { colspan: 2; text: @tr("Show the welcome page at each launch"); checked <=> root.data.show-startup; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Show the welcome page at each launch"); checked <=> Settings.data.show-startup; committed => { Settings.edited(); } }
                         }
                         if root.shows(0, @tr("Undo steps")): Row {
                             FormLabel { text: @tr("Undo steps"); }
                             IntField {
-                                value <=> root.data.undo-steps;
-                                spec: root.undo-spec;
-                                committed => { root.invalid = ""; root.edited(); }
+                                value <=> Settings.data.undo-steps;
+                                spec: Settings.undo-spec;
+                                committed => { root.invalid = ""; Settings.edited(); }
                                 invalid(t) => { root.invalid = t; }
                             }
                         }
                     }
-                    if root.shows(1, @tr("RAM")): RamBarView { ram: root.ram; }
+                    if root.shows(1, @tr("RAM")): RamBarView { ram: Ram.bar; }
                     if root.query == "" ? root.section == 1 : root.hits[1]: FormPanel {
-                        if root.data.ram-auto != "" && root.shows(1, @tr("RAM")): Row {
+                        if Settings.data.ram-auto != "" && root.shows(1, @tr("RAM")): Row {
                             FormLabel { text: @tr("RAM"); }
                             Choice {
-                                titles: [@tr("Auto ({})", root.data.ram-auto), root.data.ram-sizes[0], root.data.ram-sizes[1], root.data.ram-sizes[2], root.data.ram-sizes[3]];
-                                index: root.data.ram-size;
-                                picked(i) => { root.data.ram-size = i; root.edited(); }
+                                titles: [@tr("Auto ({})", Settings.data.ram-auto), Settings.data.ram-sizes[0], Settings.data.ram-sizes[1], Settings.data.ram-sizes[2], Settings.data.ram-sizes[3]];
+                                index: Settings.data.ram-size;
+                                picked(i) => { Settings.data.ram-size = i; Settings.edited(); }
                             }
                         }
                         if root.shows(1, @tr("Preset")): Row {
                             FormLabel { text: @tr("Preset"); }
                             HorizontalLayout {
                                 spacing: 6px;
-                                Button { text: @tr("Low"); clicked => { root.preset(PreviewQuality.low); } }
-                                Button { text: @tr("Medium"); clicked => { root.preset(PreviewQuality.medium); } }
-                                Button { text: @tr("High"); clicked => { root.preset(PreviewQuality.high); } }
-                                Button { text: @tr("Auto"); clicked => { root.preset(PreviewQuality.auto); } }
+                                Button { text: @tr("Low"); clicked => { Settings.preset(PreviewQuality.low); } }
+                                Button { text: @tr("Medium"); clicked => { Settings.preset(PreviewQuality.medium); } }
+                                Button { text: @tr("High"); clicked => { Settings.preset(PreviewQuality.high); } }
+                                Button { text: @tr("Auto"); clicked => { Settings.preset(PreviewQuality.auto); } }
                             }
                         }
                         if root.shows(1, @tr("Preview resolution")): Row {
                             FormLabel { text: @tr("Preview resolution"); }
-                            ScaleChoice { value <=> root.data.preview-resolution; committed => { root.edited(); } }
+                            ScaleChoice { value <=> Settings.data.preview-resolution; committed => { Settings.edited(); } }
                         }
                         if root.shows(1, @tr("Preview frames")): Row {
                             FormLabel { text: @tr("Preview frames"); }
-                            ScaleChoice { value <=> root.data.preview-frames; committed => { root.edited(); } }
+                            ScaleChoice { value <=> Settings.data.preview-frames; committed => { Settings.edited(); } }
                         }
                         if root.shows(1, @tr("Preview samples")): Row {
                             FormLabel { text: @tr("Preview samples"); }
                             Choice {
                                 titles: [@tr("16-bit float"), @tr("8-bit palette index (brightness fixed when the run starts)")];
-                                index: root.data.preview-index ? 1 : 0;
-                                picked(i) => { root.data.preview-index = i == 1; }
-                                committed => { root.edited(); }
+                                index: Settings.data.preview-index ? 1 : 0;
+                                picked(i) => { Settings.data.preview-index = i == 1; }
+                                committed => { Settings.edited(); }
                             }
                         }
                         if root.shows(1, @tr("Preview dithering")): Row {
                             FormLabel { text: @tr("Preview dithering"); }
                             Choice {
                                 titles: [@tr("Off"), "10", "12", "14", "16"];
-                                enabled: !root.data.preview-index;
-                                index: root.data.preview-dither;
-                                picked(i) => { root.data.preview-dither = i; }
-                                committed => { root.edited(); }
+                                enabled: !Settings.data.preview-index;
+                                index: Settings.data.preview-dither;
+                                picked(i) => { Settings.data.preview-dither = i; }
+                                committed => { Settings.edited(); }
                             }
                         }
                         if root.shows(1, @tr("Use the GPU")): Row {
-                            Check { colspan: 2; text: @tr("Use the GPU"); checked <=> root.data.use-gpu; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Use the GPU"); checked <=> Settings.data.use-gpu; committed => { Settings.edited(); } }
                         }
                     }
                     if root.query == "" ? root.section == 2 : root.hits[2]: FormPanel {
                         if root.shows(2, @tr("Re-run automatically after edits")): Row {
-                            Check { colspan: 2; text: @tr("Re-run automatically after edits"); checked <=> root.data.auto-rerun; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Re-run automatically after edits"); checked <=> Settings.data.auto-rerun; committed => { Settings.edited(); } }
                         }
                         if root.shows(2, @tr("Warn when the RAM cache is too small")): Row {
-                            Check { colspan: 2; text: @tr("Warn when the RAM cache is too small"); checked <=> root.data.warn-ram; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Warn when the RAM cache is too small"); checked <=> Settings.data.warn-ram; committed => { Settings.edited(); } }
                         }
                     }
                     if root.query == "" ? root.section == 3 : root.hits[3]: FormPanel {
                         if root.shows(3, @tr("Check for updates at start")): Row {
-                            Check { colspan: 2; text: @tr("Check for updates at start"); checked <=> root.data.check-updates; committed => { root.edited(); } }
+                            Check { colspan: 2; text: @tr("Check for updates at start"); checked <=> Settings.data.check-updates; committed => { Settings.edited(); } }
                         }
                     }
                     if root.invalid != "": Text {
@@ -265,7 +268,7 @@ export component SettingsLayer inherits Overlay {
                 Button {
                     text: @tr("Close");
                     primary: true;
-                    clicked => { root.shown = false; }
+                    clicked => { Settings.shown = false; }
                 }
             }
         }

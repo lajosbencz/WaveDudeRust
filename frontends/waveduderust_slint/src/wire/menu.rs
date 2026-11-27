@@ -34,7 +34,7 @@ pub(crate) fn wire_menu(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	});
 	let h = Handle::new(state, app);
-	app.on_modal_answer(move |button| h.show(|s, app| answer(s, app, button)));
+	app.global::<ui::Modal<'_>>().on_answer(move |button| h.show(|s, app| answer(s, app, button)));
 	let h = Handle::new(state, app);
 	// gone, the window hides: the response's default
 	app.window().on_close_requested(move || {

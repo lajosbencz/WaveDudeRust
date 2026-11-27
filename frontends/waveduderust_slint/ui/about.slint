@@ -43,14 +43,19 @@ component TextBox inherits Rectangle {
     }
 }
 
-// The About window (docs/ui/70, About dialog): Esc or Enter closes, T and O show the licences, C copies the system lines.
-export component AboutLayer inherits Overlay {
+// The About window's data and requests, filled and served by Rust.
+export global About {
     in-out property <bool> shown;
     in property <AboutData> data;
     // the system lines to the clipboard
     callback copy();
     // an address to open in the browser
-    callback open-link(string);
+    callback open-link(url: string);
+}
+
+// The About window (docs/ui/70, About dialog): Esc or Enter closes, T and O show the licences, C copies the system lines.
+export component AboutLayer inherits Overlay {
+    property <bool> shown: About.shown;
 
     property <bool> license-open;
     // the window's height, followed by a handler: a binding would loop through the boxes' heights
@@ -59,7 +64,7 @@ export component AboutLayer inherits Overlay {
     changed height => { root.room = self.height; }
     property <bool> openh264-open;
 
-    visible: root.shown;
+    visible: About.shown;
     changed shown => {
         root.license-open = false;
         root.openh264-open = false;
@@ -67,11 +72,11 @@ export component AboutLayer inherits Overlay {
     }
     keys := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape || e.text == Key.Return) { root.shown = false; return accept; }
+            if (e.text == Key.Escape || e.text == Key.Return) { About.shown = false; return accept; }
             if (e.modifiers.control || e.modifiers.alt) { return reject; }
             if (e.text == "t" || e.text == "T") { root.license-open = !root.license-open; return accept; }
-            if ((e.text == "o" || e.text == "O") && root.data.openh264 != "") { root.openh264-open = !root.openh264-open; return accept; }
-            if (e.text == "c" || e.text == "C") { root.copy(); return accept; }
+            if ((e.text == "o" || e.text == "O") && About.data.openh264 != "") { root.openh264-open = !root.openh264-open; return accept; }
+            if (e.text == "c" || e.text == "C") { About.copy(); return accept; }
             reject
         }
         Rectangle {
@@ -93,7 +98,7 @@ export component AboutLayer inherits Overlay {
                     Image { source: @image-url("../assets/icon.svg"); width: 64px; height: 64px; }
                     VerticalLayout {
                         alignment: center;
-                        Text { text: "WaveDude Rust " + root.data.version; font-size: 16px; color: Theme.text; }
+                        Text { text: "WaveDude Rust " + About.data.version; font-size: 16px; color: Theme.text; }
                         Text { text: @tr("A 2D wave simulator"); color: Theme.text-dim; }
                     }
                 }
@@ -108,9 +113,9 @@ export component AboutLayer inherits Overlay {
                     color: Theme.text;
                 }
                 Text { text: @tr("Links"); font-weight: 700; color: Theme.text; }
-                Link { text: @tr("WaveDude Next on GitHub (a separate project, not affiliated with WaveDude Rust)"); wrap: word-wrap; url: "https://github.com/wavedudenext/WaveDudeNext"; open(u) => { root.open-link(u); } }
-                Link { text: @tr("WaveSimulator2D on GitHub (0x23)"); url: "https://github.com/0x23/WaveSimulator2D"; open(u) => { root.open-link(u); } }
-                Link { text: @tr("Huygens Optics on YouTube"); url: "https://www.youtube.com/@HuygensOptics"; open(u) => { root.open-link(u); } }
+                Link { text: @tr("WaveDude Next on GitHub (a separate project, not affiliated with WaveDude Rust)"); wrap: word-wrap; url: "https://github.com/wavedudenext/WaveDudeNext"; open(u) => { About.open-link(u); } }
+                Link { text: @tr("WaveSimulator2D on GitHub (0x23)"); url: "https://github.com/0x23/WaveSimulator2D"; open(u) => { About.open-link(u); } }
+                Link { text: @tr("Huygens Optics on YouTube"); url: "https://www.youtube.com/@HuygensOptics"; open(u) => { About.open-link(u); } }
                 Text { text: @tr("License"); font-weight: 700; color: Theme.text; }
                 Text {
                     text: @tr("This program is free software under the GNU General Public License, version 3 or later.");
@@ -126,15 +131,15 @@ export component AboutLayer inherits Overlay {
                 }
                 if root.license-open: TextBox {
                     height: max(120px, min(260px, root.room * 0.3));
-                    text: root.data.license;
+                    text: About.data.license;
                 }
-                if root.data.openh264 != "": Text { text: "OpenH264"; font-weight: 700; color: Theme.text; }
-                if root.data.openh264 != "": Text {
+                if About.data.openh264 != "": Text { text: "OpenH264"; font-weight: 700; color: Theme.text; }
+                if About.data.openh264 != "": Text {
                     text: @tr("OpenH264 Video Codec provided by Cisco Systems, Inc.");
                     wrap: word-wrap;
                     color: Theme.text;
                 }
-                if root.data.openh264 != "": HorizontalLayout {
+                if About.data.openh264 != "": HorizontalLayout {
                     alignment: start;
                     Button {
                         text: root.openh264-open ? @tr("Hide the OpenH264 license") : @tr("Show the OpenH264 license");
@@ -143,26 +148,26 @@ export component AboutLayer inherits Overlay {
                 }
                 if root.openh264-open: TextBox {
                     height: max(120px, min(260px, root.room * 0.3));
-                    text: root.data.openh264;
+                    text: About.data.openh264;
                 }
                 Text { text: @tr("System"); font-weight: 700; color: Theme.text; }
                 TextBox {
                     height: min(160px, sys.preferred-height + 8px);
-                    text: root.data.system;
-                    sys := Text { visible: false; text: root.data.system; }
+                    text: About.data.system;
+                    sys := Text { visible: false; text: About.data.system; }
                 }
                 HorizontalLayout {
                     spacing: 6px;
                     Button {
                         text: @tr("Copy system info");
-                        clicked => { root.copy(); }
+                        clicked => { About.copy(); }
                         Tooltip { text: @markdown("\{@tr("Copy the system lines to the clipboard, for a bug report")}"); }
                     }
                     Rectangle { horizontal-stretch: 1; }
                     Button {
                         text: @tr("Close");
                         primary: true;
-                        clicked => { root.shown = false; }
+                        clicked => { About.shown = false; }
                     }
                 }
             }

@@ -38,7 +38,8 @@ export struct ExportData {
     profile-supported: [bool],
 }
 
-export component ExportLayer inherits Overlay {
+// The export dialog's data and requests, filled and served by Rust.
+export global Export {
     in-out property <bool> shown;
     in-out property <ExportData> data;
     callback format(index: int);
@@ -47,14 +48,18 @@ export component ExportLayer inherits Overlay {
     callback ok();
     callback delete-codec();
     callback path-edited();
-    property <bool> can-ok: root.data.path != "" && (!root.data.mp4 || root.data.codec-built-in || root.data.use-openh264)
-        && !(root.data.several && root.data.archive && root.data.archive-path.is-empty) && root.data.reason == ExportReason.none;
+}
 
-    visible: shown;
+export component ExportLayer inherits Overlay {
+    property <bool> shown: Export.shown;
+    property <bool> can-ok: Export.data.path != "" && (!Export.data.mp4 || Export.data.codec-built-in || Export.data.use-openh264)
+        && !(Export.data.several && Export.data.archive && Export.data.archive-path.is-empty) && Export.data.reason == ExportReason.none;
+
+    visible: Export.shown;
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.shown = false; return accept; }
-            if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+            if (e.text == Key.Escape) { Export.shown = false; return accept; }
+            if (e.text == Key.Return && root.can-ok) { Export.ok(); return accept; }
             reject
         }
     }
@@ -70,103 +75,103 @@ export component ExportLayer inherits Overlay {
         box := VerticalLayout {
             padding: 12px;
             spacing: 8px;
-            Text { text: root.data.title; font-weight: 700; color: Theme.text; }
+            Text { text: Export.data.title; font-weight: 700; color: Theme.text; }
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("Format"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 Choice {
-                    titles: root.data.formats;
-                    item-enabled: root.data.format-enabled;
-                    index: root.data.format;
-                    picked(i) => { root.format(i); }
+                    titles: Export.data.formats;
+                    item-enabled: Export.data.format-enabled;
+                    index: Export.data.format;
+                    picked(i) => { Export.format(i); }
                 }
             }
             HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("File"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 path := EditLine {
-                    text <=> root.data.path;
-                    edited => { root.path-edited(); }
+                    text <=> Export.data.path;
+                    edited => { Export.path-edited(); }
                     key-pressed(e) => {
-                        if (e.text == Key.Escape) { root.shown = false; return accept; }
-                        if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+                        if (e.text == Key.Escape) { Export.shown = false; return accept; }
+                        if (e.text == Key.Return && root.can-ok) { Export.ok(); return accept; }
                         reject
                     }
                 }
-                if !root.data.browser: Button { text: "..."; clicked => { root.browse(); } }
+                if !Export.data.browser: Button { text: "..."; clicked => { Export.browse(); } }
             }
-            if root.data.outputs != "": Text {
-                text: @tr("Writes {}", root.data.outputs);
+            if Export.data.outputs != "": Text {
+                text: @tr("Writes {}", Export.data.outputs);
                 color: Theme.text-dim;
                 wrap: word-wrap;
             }
-            if root.data.several: Check {
+            if Export.data.several: Check {
                 text: @tr("Archive into one ZIP file");
-                enabled: !root.data.browser;
-                checked <=> root.data.archive;
+                enabled: !Export.data.browser;
+                checked <=> Export.data.archive;
             }
-            if root.data.several && root.data.archive: HorizontalLayout {
+            if Export.data.several && Export.data.archive: HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("Archive"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 EditLine {
-                    text <=> root.data.archive-path;
+                    text <=> Export.data.archive-path;
                     key-pressed(e) => {
-                        if (e.text == Key.Escape) { root.shown = false; return accept; }
-                        if (e.text == Key.Return && root.can-ok) { root.ok(); return accept; }
+                        if (e.text == Key.Escape) { Export.shown = false; return accept; }
+                        if (e.text == Key.Return && root.can-ok) { Export.ok(); return accept; }
                         reject
                     }
                 }
-                if !root.data.browser: Button { text: "..."; clicked => { root.browse-archive(); } }
+                if !Export.data.browser: Button { text: "..."; clicked => { Export.browse-archive(); } }
             }
-            if root.data.mp4 && !root.data.codec-built-in: VerticalLayout {
+            if Export.data.mp4 && !Export.data.codec-built-in: VerticalLayout {
                 spacing: 4px;
                 Text { text: @tr("OpenH264 Video Codec provided by Cisco Systems, Inc."); color: Theme.text; }
                 HorizontalLayout {
                     spacing: 8px;
                     Check {
                         text: @tr("Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export)");
-                        checked <=> root.data.use-openh264;
+                        checked <=> Export.data.use-openh264;
                     }
-                    if root.data.codec-installed: Button {
+                    if Export.data.codec-installed: Button {
                         text: @tr("Delete the downloaded codec");
-                        clicked => { root.delete-codec(); }
+                        clicked => { Export.delete-codec(); }
                     }
                 }
             }
-            if root.data.mp4: HorizontalLayout {
+            if Export.data.mp4: HorizontalLayout {
                 spacing: 8px;
                 Text { text: @tr("H.264 profile"); color: Theme.text; vertical-alignment: center; min-width: 70px; }
                 Choice {
                     titles: ["Baseline", "Main", "High"];
-                    item-enabled: root.data.profile-supported;
-                    index: root.data.profile;
-                    picked(i) => { root.data.profile = i; }
+                    item-enabled: Export.data.profile-supported;
+                    index: Export.data.profile;
+                    picked(i) => { Export.data.profile = i; }
                 }
             }
             // a remembered profile the encoder lacks: the export uses its best
-            if root.data.mp4 && !root.data.browser && root.data.profile != 0: Text {
+            if Export.data.mp4 && !Export.data.browser && Export.data.profile != 0: Text {
                 text: @tr("OpenH264 encodes Baseline only; the export uses Baseline.");
                 color: Theme.text-dim;
                 wrap: word-wrap;
             }
-            if root.data.mp4 && root.data.browser && root.data.reason == ExportReason.none
-                && !root.data.profile-supported[root.data.profile]: Text {
+            if Export.data.mp4 && Export.data.browser && Export.data.reason == ExportReason.none
+                && !Export.data.profile-supported[Export.data.profile]: Text {
                 text: @tr("not supported by this browser");
                 color: Theme.text-dim;
                 wrap: word-wrap;
             }
-            if root.data.reason != ExportReason.none: Text {
-                text: root.data.reason == ExportReason.no-storage
+            if Export.data.reason != ExportReason.none: Text {
+                text: Export.data.reason == ExportReason.no-storage
                     ? @tr("This browser has no private file storage to write the export to; frames and probe data still export.")
-                    : root.data.reason == ExportReason.no-webcodecs ? @tr("This browser has no video encoder (WebCodecs).")
-                    : root.data.reason == ExportReason.no-profile
+                    : Export.data.reason == ExportReason.no-webcodecs ? @tr("This browser has no video encoder (WebCodecs).")
+                    : Export.data.reason == ExportReason.no-profile
                     ? @tr("This browser encodes no H.264 profile at this picture size and frame rate.")
                     : @tr("Asking the browser which H.264 profiles it encodes...");
                 color: Theme.status-error;
                 wrap: word-wrap;
             }
-            if root.data.error != "": Text {
-                text: root.data.error;
+            if Export.data.error != "": Text {
+                text: Export.data.error;
                 color: Theme.status-error;
                 wrap: word-wrap;
             }
@@ -177,9 +182,9 @@ export component ExportLayer inherits Overlay {
                     text: @tr("OK");
                     primary: true;
                     enabled: root.can-ok;
-                    clicked => { root.ok(); }
+                    clicked => { Export.ok(); }
                 }
-                Button { text: @tr("Cancel"); clicked => { root.shown = false; } }
+                Button { text: @tr("Cancel"); clicked => { Export.shown = false; } }
             }
         }
     }

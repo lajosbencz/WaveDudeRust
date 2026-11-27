@@ -16,13 +16,19 @@ export struct ExampleRow {
     description: string,
 }
 
-// The Examples dialog (docs/ui/70, Examples dialog): topic tabs, search, the topic's examples, Open and Cancel.
-export component ExamplesLayer inherits Overlay {
+// The Examples dialog's data and requests, filled and served by Rust.
+export global Examples {
     in-out property <bool> shown;
     in property <ExampleTopic> topic;
     in property <[ExampleRow]> rows;
+    callback pick-topic(topic: ExampleTopic);
+    callback search(text: string);
+    callback open(row: int);
+}
+
+// The Examples dialog (docs/ui/70, Examples dialog): topic tabs, search, the topic's examples, Open and Cancel.
+export component ExamplesLayer inherits Overlay {
     in-out property <int> current: 0;
-    callback pick-topic(ExampleTopic);
 
     property <[Tab]> tabs: [
         { topic: ExampleTopic.sources, title: @tr("Sources and coherence") },
@@ -33,23 +39,21 @@ export component ExamplesLayer inherits Overlay {
         { topic: ExampleTopic.detectors, title: @tr("Detectors and statistics") },
     ];
     // the shown topic's tab
-    property <int> shown-tab: root.topic == ExampleTopic.sources ? 0 : root.topic == ExampleTopic.lenses ? 1
-        : root.topic == ExampleTopic.gratings ? 2 : root.topic == ExampleTopic.metasurfaces ? 3
-        : root.topic == ExampleTopic.guides ? 4 : 5;
-    callback search(string);
-    callback open(int);
+    property <int> shown-tab: Examples.topic == ExampleTopic.sources ? 0 : Examples.topic == ExampleTopic.lenses ? 1
+        : Examples.topic == ExampleTopic.gratings ? 2 : Examples.topic == ExampleTopic.metasurfaces ? 3
+        : Examples.topic == ExampleTopic.guides ? 4 : 5;
     // the Welcome page in place of the dialog
     callback welcome();
 
-    visible: shown;
+    visible: Examples.shown;
     focus := FocusScope {
         key-pressed(e) => {
-            if (e.text == Key.Escape) { root.shown = false; return accept; }
-            if (e.text == Key.Return) { root.open(root.current); return accept; }
+            if (e.text == Key.Escape) { Examples.shown = false; return accept; }
+            if (e.text == Key.Return) { Examples.open(root.current); return accept; }
             if (e.text == Key.UpArrow) { root.current = max(0, root.current - 1); return accept; }
-            if (e.text == Key.DownArrow) { root.current = min(root.rows.length - 1, root.current + 1); return accept; }
-            if (e.text == Key.LeftArrow) { root.pick-topic(root.tabs[max(0, root.shown-tab - 1)].topic); return accept; }
-            if (e.text == Key.RightArrow) { root.pick-topic(root.tabs[min(root.tabs.length - 1, root.shown-tab + 1)].topic); return accept; }
+            if (e.text == Key.DownArrow) { root.current = min(Examples.rows.length - 1, root.current + 1); return accept; }
+            if (e.text == Key.LeftArrow) { Examples.pick-topic(root.tabs[max(0, root.shown-tab - 1)].topic); return accept; }
+            if (e.text == Key.RightArrow) { Examples.pick-topic(root.tabs[min(root.tabs.length - 1, root.shown-tab + 1)].topic); return accept; }
             reject
         }
     }
@@ -73,22 +77,22 @@ export component ExamplesLayer inherits Overlay {
                 for t in root.tabs: Rectangle {
                     height: Theme.row-height;
                     width: label.preferred-width + 16px;
-                    background: t.topic == root.topic ? Theme.accent : tab.has-hover ? Theme.button-hover : transparent;
+                    background: t.topic == Examples.topic ? Theme.accent : tab.has-hover ? Theme.button-hover : transparent;
                     label := Text {
                         text: t.title;
-                        color: t.topic == root.topic ? Theme.selection-text : Theme.text;
+                        color: t.topic == Examples.topic ? Theme.selection-text : Theme.text;
                     }
                     tab := TouchArea {
-                        clicked => { root.pick-topic(t.topic); root.current = 0; }
+                        clicked => { Examples.pick-topic(t.topic); root.current = 0; }
                     }
                 }
             }
             EditLine {
                 placeholder-text: @tr("Search");
-                edited(t) => { root.search(t); root.current = 0; }
+                edited(t) => { Examples.search(t); root.current = 0; }
             }
             ListView {
-                for row[i] in root.rows: Rectangle {
+                for row[i] in Examples.rows: Rectangle {
                     background: i == root.current ? Theme.selection : area.has-hover ? Theme.row-hover : transparent;
                     VerticalLayout {
                         padding: 4px;
@@ -104,7 +108,7 @@ export component ExamplesLayer inherits Overlay {
                     }
                     area := TouchArea {
                         clicked => { root.current = i; }
-                        double-clicked => { root.open(i); }
+                        double-clicked => { Examples.open(i); }
                     }
                 }
             }
@@ -113,7 +117,7 @@ export component ExamplesLayer inherits Overlay {
                 Button {
                     text: @tr("Welcome page...");
                     clicked => {
-                        root.shown = false;
+                        Examples.shown = false;
                         root.welcome();
                     }
                 }
@@ -121,12 +125,12 @@ export component ExamplesLayer inherits Overlay {
                 Button {
                     text: @tr("Open");
                     primary: true;
-                    enabled: root.rows.length > 0;
-                    clicked => { root.open(root.current); }
+                    enabled: Examples.rows.length > 0;
+                    clicked => { Examples.open(root.current); }
                 }
                 Button {
                     text: @tr("Cancel");
-                    clicked => { root.shown = false; }
+                    clicked => { Examples.shown = false; }
                 }
             }
         }

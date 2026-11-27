@@ -139,14 +139,14 @@ impl State {
 			(Some((_, w)), None) => {
 				let ticks = w.proposal();
 				self.warning_ticks = Some(ticks);
-				app.set_memory_warning(memory::data(&w, ticks));
-				app.set_memory_warning_shown(true);
+				app.global::<ui::MemoryWarning<'_>>().set_data(memory::data(&w, ticks));
+				app.global::<ui::MemoryWarning<'_>>().set_shown(true);
 			}
 			// the request may have changed under it
-			(Some((_, w)), Some(ticks)) => app.set_memory_warning(memory::data(&w, ticks)),
+			(Some((_, w)), Some(ticks)) => app.global::<ui::MemoryWarning<'_>>().set_data(memory::data(&w, ticks)),
 			(None, Some(_)) => {
 				self.warning_ticks = None;
-				app.set_memory_warning_shown(false);
+				app.global::<ui::MemoryWarning<'_>>().set_shown(false);
 			}
 			(None, None) => {}
 		}
@@ -155,9 +155,9 @@ impl State {
 	/// `edit` on the export dialog's data with the dialog open; none open, nothing.
 	pub(crate) fn edit_export(&self, app: &AppWindow, edit: impl FnOnce(&export::Dialog, &mut ui::ExportData)) {
 		let Some(dialog) = &self.export_dialog else { return };
-		let mut data = app.get_export_data();
+		let mut data = app.global::<ui::Export<'_>>().get_data();
 		edit(dialog, &mut data);
-		app.set_export_data(data);
+		app.global::<ui::Export<'_>>().set_data(data);
 	}
 
 	/// Saves the settings; a failure is logged.
@@ -170,7 +170,7 @@ impl State {
 		wake::wake();
 		self.unsaved.set(self.doc.dirty());
 		if self.export_dialog.is_none() {
-			app.set_export_shown(false);
+			app.global::<ui::Export<'_>>().set_shown(false);
 		}
 		self.selection.retain(&self.doc.project);
 		self.show_tree(&app.global::<ui::Tree<'_>>());

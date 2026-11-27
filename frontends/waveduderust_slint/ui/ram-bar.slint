@@ -11,6 +11,12 @@ export struct RamBar {
     cache-share: float,
 }
 
+// The memory figures, filled by Rust; `refresh` asks for new ones.
+export global Ram {
+    in property <RamBar> bar;
+    callback refresh();
+}
+
 // The memory as a bar: in use, then the RAM cache, then the rest free.
 export component RamBarView inherits VerticalLayout {
     in property <RamBar> ram;

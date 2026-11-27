@@ -15,13 +15,14 @@ use crate::{ask_replace, export};
 /// The export dialog: format, paths, codec and OK.
 pub(crate) fn wire_export(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	let h = Handle::new(state, app);
-	app.on_export_format(move |index| h.read(|s, app| s.edit_export(app, |d, data| d.format(data, index))));
+	app.global::<ui::Export<'_>>()
+		.on_format(move |index| h.read(|s, app| s.edit_export(app, |d, data| d.format(data, index))));
 	let h = Handle::new(state, app);
-	app.on_export_browse(move || {
+	app.global::<ui::Export<'_>>().on_browse(move || {
 		h.read(|s, app| s.edit_export(app, |d, data| d.browse(data, &app.global::<ui::Words<'_>>())));
 	});
 	let h = Handle::new(state, app);
-	app.on_export_path_edited(move || {
+	app.global::<ui::Export<'_>>().on_path_edited(move || {
 		h.read(|s, app| {
 			s.edit_export(app, |d, data| {
 				data.error = Default::default();
@@ -30,26 +31,26 @@ pub(crate) fn wire_export(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		});
 	});
 	let h = Handle::new(state, app);
-	app.on_export_browse_archive(move || {
+	app.global::<ui::Export<'_>>().on_browse_archive(move || {
 		h.read(|s, app| s.edit_export(app, |d, data| d.browse_archive(data, &app.global::<ui::Words<'_>>())));
 	});
 	let weak = app.as_weak();
-	app.on_export_delete_codec(move || {
+	app.global::<ui::Export<'_>>().on_delete_codec(move || {
 		let Some(app) = weak.upgrade() else { return };
-		let mut data = app.get_export_data();
+		let mut data = app.global::<ui::Export<'_>>().get_data();
 		export::delete_codec(&mut data);
-		app.set_export_data(data);
+		app.global::<ui::Export<'_>>().set_data(data);
 	});
 	let h = Handle::new(state, app);
-	app.on_export_ok(move || {
+	app.global::<ui::Export<'_>>().on_ok(move || {
 		h.with(|s, app| {
 			let Some(dialog) = &s.export_dialog else { return };
-			let mut data = app.get_export_data();
+			let mut data = app.global::<ui::Export<'_>>().get_data();
 			#[cfg(target_arch = "wasm32")]
 			if let Some(download) = dialog.csv_download(&data) {
 				match download {
 					Ok(download) => {
-						app.set_export_shown(false);
+						app.global::<ui::Export<'_>>().set_shown(false);
 						s.export_dialog = None;
 						tracing::info!("Exported the probe data as {}", download.name());
 						tell(app, ui::Message::ExportReady, download.name());
@@ -57,7 +58,7 @@ pub(crate) fn wire_export(state: &Rc<RefCell<State>>, app: &AppWindow) {
 					}
 					Err(e) => {
 						data.error = e.into();
-						app.set_export_data(data);
+						app.global::<ui::Export<'_>>().set_data(data);
 					}
 				}
 				return;
@@ -72,7 +73,7 @@ pub(crate) fn wire_export(state: &Rc<RefCell<State>>, app: &AppWindow) {
 				}
 				Err(e) => {
 					data.error = e.into();
-					app.set_export_data(data);
+					app.global::<ui::Export<'_>>().set_data(data);
 				}
 			}
 		});
