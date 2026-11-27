@@ -162,9 +162,24 @@ impl Simulation {
 		Ok(())
 	}
 
-	/// Advances `steps` time steps.
+	/// Advances `steps` time steps, as many [`step`](Self::step)s would: in batches the engine may fuse
+	/// (`WaveEngine::advance_steps`), each ending before the drain of the probe readings that follows its last step.
 	pub fn run(&mut self, steps: u32) -> Result<(), SimulationError> {
-		(0..steps).try_for_each(|_| self.step())
+		let limit = self.engine.fused_steps().max(1);
+		let mut left = steps;
+		while left > 0 {
+			let probes = self.collector.is_some();
+			let mut k = left.min(limit);
+			if probes {
+				k = k.min(PROBE_DRAIN - self.engine.time() % PROBE_DRAIN);
+			}
+			self.engine.advance_steps(k, probes)?;
+			if probes && self.engine.time().is_multiple_of(PROBE_DRAIN) {
+				self.drain()?;
+			}
+			left -= k;
+		}
+		Ok(())
 	}
 
 	/// Steps done.

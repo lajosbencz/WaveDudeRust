@@ -10,6 +10,7 @@ use waveduderust::f16;
 use waveduderust::model::{Edges, Layer, PulseShape, Scene, Stencil};
 use waveduderust::unstable::engine::cpu::CpuEngine;
 use waveduderust::unstable::engine::rev2::{Backend, CpuRev2Engine};
+use waveduderust::unstable::engine::substeps::courant_limit;
 use waveduderust::unstable::engine::{
 	Emitter, EngineOptions, FrameShape, ProbeCells, ProbeReadings, SampleFormat, SceneData, WaveEngine,
 };
@@ -460,6 +461,181 @@ fn grids_near_the_fewest_rows_of_a_band_agree() {
 					engines.check("step 60");
 				}
 			}
+		}
+	});
+}
+
+/// Batches of steps a caller may ask for, most no multiple of the fused steps.
+const BATCHES: [u32; 10] = [1, 2, 3, 5, 7, 4, 8, 11, 6, 13];
+
+/// Field probes and intensity probes: by sources, on a mirror line, in the rim, one cell twice, and far from the
+/// sources, where the field arrives late.
+fn fused_probes(h: u32) -> [ProbeCells; 2] {
+	let y = |y: u32| y.min(h - 1);
+	[
+		ProbeCells {
+			layer: Layer::Field,
+			cells: vec![(30, y(40)), (45, y(20)), (1, 1), (127, h - 1), (64, y(48)), (30, y(40))],
+		},
+		ProbeCells { layer: Layer::Intensity, cells: vec![(30, y(40)), (90, y(85)), (126, 2), (5, y(90))] },
+	]
+}
+
+/// The CPU_REV2 engine on each backend stepping in fused sweeps of at most `k` steps (engine/rev2, Fused steps) against
+/// the same backend one step at a time: the same field, intensity stages and probe readings after every
+/// batch of [`BATCHES`], `rounds` times over, the emitters set from round `silent` on: on the generic backend bit for
+/// bit, so the CPU engine's (the tests above); on another within [`TOLERANCE`], as a fused sweep's columns, grown by
+/// more steps' reach, split the rows into other spans, whose last cells a backend may round otherwise (backend/mod.rs).
+fn fused_agree(
+	build: impl Fn() -> SceneData,
+	stencil: Stencil,
+	sub_steps: Option<u32>,
+	emitters: &[Emitter],
+	what: &str,
+	rounds: usize,
+	silent: usize,
+) {
+	let backends = std::iter::once(Backend::Generic).chain(others());
+	for (backend, k) in backends.flat_map(|b| [2, 3, 4, 8].map(|k| (b, k))) {
+		let what = format!("{what}, {}, fusing {k}", backend.name());
+		let engine = || match sub_steps {
+			Some(n) => CpuRev2Engine::with_backend_and_sub_steps(build(), options(stencil), backend, n),
+			None => CpuRev2Engine::with_backend(build(), options(stencil), backend),
+		};
+		let (mut fused, mut single) = (engine(), engine());
+		fused.set_fused_steps(k);
+		single.set_fused_steps(1);
+		let probes = fused_probes(fused.scene().canvas_height);
+		for e in [&mut fused, &mut single] {
+			e.set_probes(&probes);
+		}
+		let mut traces = (Vec::new(), Vec::new());
+		let want = if stencil == Stencil::NinePoint { k } else { 1 };
+		assert_eq!(WaveEngine::fused_steps(&fused), want, "{what}");
+		for (round, batch) in (0..rounds).flat_map(|r| BATCHES.map(|b| (r, b))) {
+			if round == silent && batch == BATCHES[0] {
+				fused.set_emitters(emitters);
+				single.set_emitters(emitters);
+			}
+			if round == 1 && batch == BATCHES[0] {
+				// The intensity untracked for a round, then tracked from zero again.
+				fused.set_track_intensity(false);
+				single.set_track_intensity(false);
+			} else if round == 2 && batch == BATCHES[0] {
+				fused.set_track_intensity(true);
+				single.set_track_intensity(true);
+			}
+			WaveEngine::advance_steps(&mut fused, batch, true).unwrap();
+			for _ in 0..batch {
+				single.advance_one_step();
+				single.queue_probes().unwrap();
+			}
+			let when = format!("{what}, step {}", single.time());
+			assert_eq!(fused.time(), single.time(), "{when}");
+			let planes = |e: &CpuRev2Engine| {
+				let (s1, s2) = e.intensity_stages();
+				[e.field_padded().to_vec(), s1.to_vec(), s2.to_vec()]
+			};
+			for (plane, (f, s)) in ["field", "s1", "s2"].iter().zip(planes(&fused).iter().zip(planes(&single).iter())) {
+				if backend != Backend::Generic {
+					let d = relative(f, s);
+					assert!(d <= TOLERANCE, "{when}: the fused {plane} differs by {d:e} of its peak");
+				} else if let Some(i) = f.iter().zip(s).position(|(a, b)| a.to_bits() != b.to_bits()) {
+					panic!("{when}: the fused {plane} differs at padded cell {i}: {} against {}", f[i], s[i]);
+				}
+			}
+			let readings = |e: &mut CpuRev2Engine| {
+				let (pending, mut queued) = (e.pending_probes().unwrap(), Vec::new());
+				e.drain_probes(pending, &mut |r| queued.push(r.clone())).unwrap();
+				queued
+			};
+			let (f, s) = (readings(&mut fused), readings(&mut single));
+			assert_eq!(s.len(), batch as usize, "{when}");
+			assert_eq!(f.len(), s.len(), "{when}");
+			if backend == Backend::Generic {
+				let bits = |r: &[ProbeReadings]| {
+					r.iter().flat_map(|r| r.values().iter().map(|v| v.to_bits())).collect::<Vec<_>>()
+				};
+				assert!(bits(&f) == bits(&s), "{when}: the fused probe readings differ");
+			}
+			traces.0.extend(f);
+			traces.1.extend(s);
+		}
+		assert!(peak(single.field_padded()) > 0.0, "{what}: the scene is excited");
+		// Each probe cell's values over the run, against the single steps' peak over them.
+		let (f, s) = traces;
+		for cell in 0..s.first().map_or(0, |r| r.values().len()) {
+			let trace = |r: &[ProbeReadings]| r.iter().map(|r| r.values()[cell]).collect::<Vec<_>>();
+			let d = relative(&trace(&f), &trace(&s));
+			assert!(d <= TOLERANCE, "{what}: the fused readings of probe cell {cell} differ by {d:e} of their peak");
+		}
+	}
+}
+
+/// The standard scene with its speeds scaled so one sub-step a step meets the CFL bound.
+fn one_sub_step(edges: Edges, damping_edge: i32, stencil: Stencil) -> SceneData {
+	let mut scene = scene(edges, damping_edge, 100);
+	let scale = 0.8 * courant_limit(stencil) as f32;
+	let max = scene.max_c2();
+	scene.c2.iter_mut().for_each(|c2| *c2 *= scale * scale / max);
+	scene
+}
+
+/// Emitters that pulse and detach within the batches, besides the usual ones.
+fn detaching() -> Vec<Emitter> {
+	let mut emitters = emitters();
+	emitters.push(Emitter { detach_after_step: Some(23), ..emitter(64, 48, 110.0) });
+	emitters.push(Emitter { pulsed: true, detach_after_step: Some(61), ..emitter(100, 60, 70.0) });
+	emitters
+}
+
+#[test]
+fn fused_steps_agree_with_single_steps() {
+	on_seams(|| {
+		for stencil in STENCILS {
+			for (edges, damping_edge) in EDGES {
+				let what = format!("{stencil:?} {edges:?} damping edge {damping_edge}");
+				let build = || scene(edges, damping_edge, 100);
+				fused_agree(build, stencil, None, &detaching(), &format!("{what}, CFL sub-steps"), 3, 0);
+				let build = || one_sub_step(edges, damping_edge, stencil);
+				assert_eq!(CpuEngine::new(build(), options(stencil)).sub_steps(), 1);
+				fused_agree(build, stencil, None, &detaching(), &format!("{what}, 1 sub-step"), 3, 0);
+			}
+		}
+	});
+}
+
+#[test]
+fn fused_steps_agree_with_odd_sub_steps_short_grids_and_silence() {
+	on_seams(|| {
+		let rim = [(Edges::Open, -RIM), (Edges::Open, 0)];
+		for (edges, damping_edge) in rim {
+			let what = format!("{edges:?} damping edge {damping_edge}");
+			let build = || scene(edges, damping_edge, 100);
+			fused_agree(build, Stencil::NinePoint, Some(3), &detaching(), &format!("{what}, 3 sub-steps"), 3, 0);
+			// Fewer rows than 8 bands of a fused sweep take, and an uneven split.
+			for h in [12, 47, 61] {
+				let settings =
+					Scene::default().with_damping_edge(damping_edge).with_edges(edges).with_image_sources(true);
+				let build = || {
+					let mut scene = SceneData::from_pixels(&pixels(100)[..(W * h * 4) as usize], W, h, &settings);
+					let max = scene.max_c2();
+					scene.c2.iter_mut().for_each(|c2| *c2 *= 0.6 / max);
+					scene
+				};
+				let sources =
+					[emitter(30, 0, 100.0), emitter(70, h as i32 / 2, 90.0), emitter(100, h as i32 - 1, 80.0)];
+				fused_agree(build, Stencil::NinePoint, None, &sources, &format!("{what}, {h} rows"), 3, 0);
+			}
+			// Nothing to compute for a round: no image sources, and the emitters set after it.
+			let settings = Scene::default().with_damping_edge(damping_edge).with_edges(edges);
+			let build = || {
+				let mut scene = SceneData::from_pixels(&pixels(100), W, H, &settings);
+				let max = scene.max_c2();
+				scene.c2.iter_mut().for_each(|c2| *c2 *= 0.6 / max);
+				scene
+			};
+			fused_agree(build, Stencil::NinePoint, None, &detaching(), &format!("{what}, silent at first"), 4, 1);
 		}
 	});
 }

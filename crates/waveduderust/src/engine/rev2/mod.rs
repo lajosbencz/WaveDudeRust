@@ -69,6 +69,27 @@
 //!   The 4th order applies the rim twice, to the field in `W` and to `w` in `D`, each with its own memory variables and
 //!   its own psi of y unit. Each row's memory variables are its own, so the trapezoids carry them like the field.
 //!
+//! Fused steps: a sweep may take several whole steps too ([`CpuRev2Engine::advance_steps`], at most
+//! [`FUSED_STEPS`] by default, the 9-point only; `WaveEngine::advance_steps`), so a row is read from memory once per
+//! `k` steps. The sweep's levels are the `k n` sub-steps one after another, and what happens between two steps happens
+//! between their levels, row by row:
+//!
+//! - the forcing: the source tables of all the levels are taken before the sweep, in order, each step's at its time
+//!   (an emitter that detaches within the sweep has its fade and its silence in them), and the driven cells are those
+//!   of any level;
+//! - the intensity: the stages advance in the update to the last level of each step (`j % n == 0`);
+//! - the probes: the update of a row to the last level of step `i` records the row's probe cells (the field it wrote,
+//!   the intensity of its stages) into reading `i`; the readings start as the ones before the sweep, which hold on the
+//!   cells outside its area, and are queued in step order after it;
+//! - Mur's condition and the CPML: per level, as within a step; the damage: the area is grown by the `k n` levels'
+//!   reach up front, a superset of `k` single steps' areas, outside which every cell computes to the +0 it holds.
+//!
+//! Captures, checks and drains need the engine between steps, so a caller ends its batches there (run/worker.rs).
+//! The values are those of `k` single steps bit for bit on the generic backend; another backend, which may round a
+//! span's last cells otherwise (backend/mod.rs), within its tolerance, as the sweep's wider area splits the rows into
+//! other spans. A sweep of a single level (one sub-step, one step) runs the passes; the 4th order takes one step a
+//! sweep.
+//!
 //! Backends: an engine runs on one backend, chosen when it is built ([`Backend`]: the best one this CPU runs, or one
 //! named); the passes and the blocked steps are generic over the backend's type (`RowKernels`), which `on_backend!`
 //! picks once per step. Each row's work goes through the backend's entry (`run_row`), so the Rust around the kernels
@@ -90,7 +111,7 @@ use rayon::prelude::*;
 
 pub use self::backend::Backend;
 use self::backend::{Intensity, RowKernels, RowMedium, advance, on_backend};
-use self::blocked::{Line, MurRows, Rim, RimSet, Rings, Shared, Step, Tiling};
+use self::blocked::{Line, MurRows, ProbeLog, Rim, RimSet, Rings, Shared, Step, Tiling};
 use super::cpu::{Rows, UniformRuns, chunks_or_none, cut_spans, drp, medium_spans, nine_point, plane_rows, row_cuts};
 use super::damage::{Damage, extent};
 use super::forcing::live;
@@ -113,8 +134,14 @@ pub struct CpuRev2Engine {
 	/// A blocked step's source table of each sub-step, and its driven cells with their runs of table entries.
 	tables: Vec<Vec<f32>>,
 	driven: Vec<(usize, u32, u32)>,
-	/// The last blocked step's tiling, kept for the next.
-	tiling: Option<Tiling>,
+	/// The tilings of the last blocked steps by their levels, kept for the next.
+	tilings: Vec<Tiling>,
+	/// The most steps a blocked sweep fuses (module docs, Fused steps).
+	fused: u32,
+	/// The probe cells of a fused sweep by padded cell, with their place in a reading and whether they read the
+	/// intensity; and its readings, one after another.
+	probe_cells: Vec<(usize, u32, bool)>,
+	readings: Vec<f32>,
 	/// The 4th order's rings of `w` rows of a blocked step's bands, kept for the next (blocked.rs).
 	rings: Rings,
 }
@@ -163,7 +190,10 @@ impl CpuRev2Engine {
 			mur: MurRows::default(),
 			tables: Vec::new(),
 			driven: Vec::new(),
-			tiling: None,
+			tilings: Vec::new(),
+			fused: FUSED_STEPS,
+			probe_cells: Vec::new(),
+			readings: Vec::new(),
 			rings: Rings::default(),
 		};
 		engine.scene_loaded();
@@ -173,6 +203,38 @@ impl CpuRev2Engine {
 	/// The backend the engine runs on.
 	pub fn backend(&self) -> Backend {
 		self.backend
+	}
+
+	/// Fuses at most `k` steps into one sweep from now on ([`FUSED_STEPS`] by default); for measurements.
+	///
+	/// # Panics
+	///
+	/// When `k` is 0.
+	#[doc(hidden)]
+	pub fn set_fused_steps(&mut self, k: u32) {
+		assert!(k >= 1, "at least one step a sweep");
+		self.fused = k;
+	}
+
+	/// [`WaveEngine::fused_steps`](super::WaveEngine::fused_steps): the most steps a sweep fuses; 1 for the 4th order,
+	/// whose steps are not fused.
+	pub fn fused_steps(&self) -> u32 {
+		match self.host.shared.scheme {
+			TimeScheme::Leapfrog => self.fused,
+			TimeScheme::ModifiedEquation => 1,
+		}
+	}
+
+	/// [`WaveEngine::advance_steps`](super::WaveEngine::advance_steps), which cannot fail here: `n` steps, in sweeps of
+	/// up to [`fused_steps`](Self::fused_steps) steps each (module docs, Fused steps).
+	pub fn advance_steps(&mut self, n: u32, probes: bool) {
+		let mut left = n;
+		while left > 0 {
+			let k = left.min(self.fused_steps());
+			on_backend!(self.backend, B => self.steps_on(self.kernels::<B>(), k as usize, probes));
+			self.host.shared.time += k;
+			left -= k;
+		}
 	}
 
 	/// Rebuilds the uniform runs from the medium the host loaded.
@@ -229,23 +291,28 @@ impl CpuRev2Engine {
 
 	/// One step (module docs, Blocked steps) on the engine's backend.
 	fn step(&mut self) {
-		on_backend!(self.backend, B => self.step_on(self.kernels::<B>()));
+		on_backend!(self.backend, B => self.steps_on(self.kernels::<B>(), 1, false));
 	}
 
-	/// One step: the sub-steps fused into one sweep over the rows when there are two or more and anything to compute,
-	/// else one by one.
-	fn step_on<B: RowKernels>(&mut self, kernels: B) {
+	/// `k` steps, a probe reading queued after each when `probes`; the caller counts them. Their sub-steps fused into
+	/// one sweep over the rows when there are two or more and anything to compute, else one by one.
+	fn steps_on<B: RowKernels>(&mut self, kernels: B, k: usize, probes: bool) {
 		let n = self.host.shared.sub_steps as usize;
-		if n < 2 {
-			return self.sub_steps_in_turn();
+		let levels = k * n;
+		if levels < 2 {
+			self.sub_steps_in_turn();
+			if probes {
+				self.host.queue_probes();
+			}
+			return;
 		}
 		let h = &mut self.host;
 		let len = h.values.len();
-		self.tables.resize_with(n, Vec::new);
-		for (k, table) in self.tables.iter_mut().enumerate() {
+		self.tables.resize_with(levels, Vec::new);
+		for (l, table) in self.tables[..levels].iter_mut().enumerate() {
 			table.clear();
 			table.resize(len, 0.0);
-			h.shared.source_values(table, k as u32);
+			h.shared.source_values_ahead(table, (l / n) as u32, (l % n) as u32);
 		}
 		// The cells a source drives on any sub-step, ascending, and the damage with them.
 		let (s, groups) = (h.stride, &h.groups);
@@ -253,32 +320,58 @@ impl CpuRev2Engine {
 		let mut known = h.damage.clone();
 		for ((&cell, &(start, count)), _) in groups.cells.iter().zip(&groups.runs).zip(0..) {
 			let run = &groups.entries[start as usize..(start + count) as usize];
-			if self.tables.iter().any(|t| run.iter().any(|&e| live(t[e as usize]))) {
+			if self.tables[..levels].iter().any(|t| run.iter().any(|&e| live(t[e as usize]))) {
 				self.driven.push((cell, start, count));
 				known.include(cell, s);
 			}
 		}
 		self.driven.sort_unstable_by_key(|&(cell, ..)| cell);
 		if known.is_empty() {
-			for k in 0..n {
-				self.host.values.copy_from_slice(&self.tables[k]);
-				let intensity = self.host.shared.accumulates(k as u32);
+			for l in 0..levels {
+				self.host.values.copy_from_slice(&self.tables[l]);
+				let intensity = self.host.shared.accumulates((l % n) as u32);
 				self.sub_step_on(kernels, intensity);
+				if probes && (l + 1) % n == 0 {
+					self.host.queue_probes();
+				}
 			}
 			return;
 		}
-		self.blocked_step(kernels, n, known);
+		self.blocked_steps(kernels, k, known, probes);
 	}
 
-	/// The sub-steps of a step fused into one sweep (blocked.rs) on the damage with the step's driven cells, `known`,
-	/// grown by their reach; then the damage takes in what they made non-zero.
-	fn blocked_step<B: RowKernels>(&mut self, kernels: B, n: usize, known: Damage) {
+	/// The sub-steps of `k` steps fused into one sweep (blocked.rs) on the damage with the steps' driven cells, `known`,
+	/// grown by their reach, recording the probes after each step when `probes`; then the damage takes in what they
+	/// made non-zero.
+	fn blocked_steps<B: RowKernels>(&mut self, kernels: B, k: usize, known: Damage, probes: bool) {
 		let h = &mut self.host;
 		let (s, gw, gh, scheme) = (h.stride, h.gw(), h.shared.scene.grid_height() as usize, h.shared.scheme);
+		let (sub, n) = (h.shared.sub_steps as usize, k * h.shared.sub_steps as usize);
 		// The 4th order's sub-step is two passes, each reaching `reach`.
 		let passes = if scheme == TimeScheme::Leapfrog { 1 } else { 2 };
 		let area = known.grown(n * passes * h.reach, gw, gh);
-		let intensity = h.shared.accumulates(n as u32 - 1) && !h.s1.is_empty();
+		let intensity = h.shared.options.track_intensity && !h.s1.is_empty();
+		// Each step's readings start as the ones now, which hold on the rows the sweep does not update.
+		let width = if probes {
+			h.probe_values(&mut self.readings);
+			let width = self.readings.len();
+			self.readings.resize(k * width, 0.0);
+			for step in 1..k {
+				self.readings.copy_within(..width, step * width);
+			}
+			self.probe_cells.clear();
+			self.probe_cells.extend(h.probe_cells().zip(0..).map(|((cell, intensity), slot)| (cell, slot, intensity)));
+			self.probe_cells.sort_unstable_by_key(|&(cell, ..)| cell);
+			Some(width)
+		} else {
+			None
+		};
+		let log = width.map(|width| ProbeLog {
+			cells: &self.probe_cells,
+			out: Shared::of(&mut self.readings),
+			width,
+			scale: h.shared.options.intensity_scale as f32,
+		});
 		let stages = intensity.then(|| (Shared::of(&mut h.s1), Shared::of(&mut h.s2), h.alpha));
 		let planes = [Shared::of(&mut h.u), Shared::of(&mut h.prev)];
 		let medium = (h.stride, &h.c2[..], &h.d[..], &h.cuts[..], h.mirrors);
@@ -298,9 +391,9 @@ impl CpuRev2Engine {
 			}
 			Rim { tables, z, sets }
 		});
-		let tiling = match self.tiling.take() {
-			Some(tiling) if tiling.is(n, scheme, rim.is_some()) => tiling,
-			_ => Tiling::new(n, scheme, rim.is_some()),
+		let tiling = match self.tilings.iter().position(|t| t.is(n, scheme, rim.is_some())) {
+			Some(at) => self.tilings.swap_remove(at),
+			None => Tiling::new(n, scheme, rim.is_some()),
 		};
 		let step = Step {
 			kernels,
@@ -308,6 +401,7 @@ impl CpuRev2Engine {
 			gw,
 			gh,
 			n,
+			sub,
 			planes,
 			stages,
 			alpha: h.alpha,
@@ -320,13 +414,21 @@ impl CpuRev2Engine {
 			entries: &h.groups.entries,
 			mur: &self.mur,
 			rim,
+			probes: log,
 		};
 		step.run(&tiling, BANDS_PER_THREAD * rayon::current_num_threads(), &mut self.rings);
-		self.tiling = Some(tiling);
+		// A few tilings: one per batch length a caller uses, for each scheme and sub-step count; any is evicted past 7.
+		self.tilings.truncate(7);
+		self.tilings.push(tiling);
 		if n % 2 == 1 {
 			std::mem::swap(&mut h.u, &mut h.prev);
 		}
 		h.values.copy_from_slice(&self.tables[n - 1]);
+		if let Some(width) = width {
+			for step in 0..k {
+				h.probe_queue().push(&self.readings[step * width..][..width]);
+			}
+		}
 		let damage = extent(&h.u, s, &area, known);
 		h.damage = extent(&h.prev, s, &area, damage);
 	}
@@ -363,7 +465,15 @@ impl CpuRev2Engine {
 	}
 }
 
-host_engine!(CpuRev2Engine, |engine| engine.backend.engine_name());
+host_engine!(
+	CpuRev2Engine,
+	|engine| engine.backend.engine_name(),
+	CpuRev2Engine::fused_steps,
+	CpuRev2Engine::advance_steps
+);
+
+/// The most steps a blocked sweep fuses by default (module docs, Fused steps; docs/measurements.md).
+pub const FUSED_STEPS: u32 = 4;
 
 /// The bands of a blocked step per thread of the rayon pool (blocked.rs).
 const BANDS_PER_THREAD: usize = 1;

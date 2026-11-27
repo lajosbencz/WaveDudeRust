@@ -498,6 +498,54 @@ kernel never diverged; with one `v128` per iteration none of 120 diverged (Lifto
 (microcode 0x860010d); natively the AVX2 and generic backends gave one hash in 30 runs each. Before the CPU_REV2 engine
 runs in the browser, the comparison should be repeated on another machine and in a browser's V8.
 
+## The CPU_REV2 engine's fused steps
+
+2026-11-27, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs; its memory bus saturates at about 18 GB/s
+from 3 to 4 threads). A harness outside the repository (`waveduderust` with `unstable-engine` and `unstable-scene`,
+`lto = "thin"`, `codegen-units = 1`) steps the CPU_REV2 engine on its AVX2 backend from a full-damage start (a smooth
+field over every cell, so every step covers the whole grid) on a blank scene with one source in the middle, intensity
+on, 9-point stencil, 2 sub-steps a step: 16 steps to warm up, then `advance_steps(16)` 8 to 72 times (24 to 72 on 8
+threads), at most `K` steps a sweep (`set_fused_steps`), so 16 steps go as sweeps of `K` and a rest. Steps a second,
+two passes; 1 thread is `taskset -c 3`.
+
+| Threads | Grid, rim | K = 1 | 2 | 3 | 4 | 6 | 8 |
+|---|---|---|---|---|---|---|---|
+| 1 | 1920x1080, 0 | 223, 246 | 331, 331 | 363, 363 | 430, 419 | 455, 446 | 485, 478 |
+| 1 | 1920x1080, 32 | 152, 151 | 214, 214 | 231, 234 | 254, 255 | 264, 260 | 273, 267 |
+| 1 | 800x600, 0 | 862, 863 | 1305, 1375 | 1441, 1468 | 1641, 1670 | 1673, 1792 | 1835, 1891 |
+| 1 | 800x600, 32 | 439, 446 | 600, 615 | 663, 673 | 733, 725 | 761, 738 | 781, 766 |
+| 8 | 1920x1080, 0 | 370, 400 | 733, 710 | 855, 960 | 1110, 1185 | 1189, 1750 | 1646, 1494 |
+| 8 | 1920x1080, 32 | 298, 287 | 482, 484 | 507, 592 | 570, 624 | 562, 551 | 481, 473 |
+| 8 | 800x600, 0 | 3256, 3263 | 4482, 3635 | 4259, 4654 | 5108, 5306 | 3697, 5178 | 6988, 6847 |
+| 8 | 800x600, 32 | 959, 990 | 1543, 1506 | 1497, 1676 | 1883, 1725 | 1564, 1376 | 1152, 1134 |
+
+K = 1 is the engine before: one step a sweep, its 2 sub-steps fused. A sweep of `K` steps reads each row from memory
+once, so 1 thread gains 1.7 to 1.9 times at K = 4 and 8 threads 1.6 to 3 times. With a rim, 8 threads lose past K = 4:
+the trapezoids' sides grow by 4 rows a level (blocked.rs), 30 rows each at K = 4 and 62 at K = 8, against bands of 135
+and 75 rows, so the seams' phase takes a growing share. Without a rim K = 8 gains further on 8 threads, but the default
+is K = 4 ([`FUSED_STEPS`](../crates/waveduderust/src/engine/rev2/mod.rs)), the best or near it everywhere.
+
+CPU use on 8 threads, `/usr/bin/time`, 6416 steps of 1920x1080 (setup included), (user + sys) / wall / 8:
+
+| K, rim | Steps a second | Wall (s) | User + sys (s) | CPU use |
+|---|---|---|---|---|
+| 1, 0 | 360 | 18.2 | 97.8 | 67 % |
+| 1, 32 | 257 | 25.5 | 116.6 | 57 % |
+| 4, 0 | 1007 | 6.8 | 30.5 | 56 % |
+| 4, 32 | 535 | 12.6 | 54.6 | 54 % |
+| 8, 0 | 1271 | 5.5 | 24.5 | 56 % |
+| 8, 32 | 445 | 15.0 | 68.8 | 57 % |
+
+The threads still idle about half the time: the bands wait for the slowest at the end of each phase, the seams' phase
+runs a seam per thread on 7 of the 8, and this host preempts its guest's threads.
+
+The fused steps' values: on the generic backend those of one step a sweep bit for bit, and so the legacy CPU engine's
+(tests/rev2.rs; the run worker's frames and traces too, run/worker.rs). On the AVX2 backend they agree within 1e-4 of
+the peak, not bit for bit: a sweep's area, grown by `K` steps' reach, splits a row into other spans while the damage
+grows, and the kernel takes a span's last `len % 8` cells through the generic backend's arithmetic. Once the damage
+covers the grid the spans are the same; from a full-damage start the field's difference to the legacy engine stays
+the K = 1 engine's (9.6e-7 of the peak at 800x600, rim 32, 8 threads, K = 1, 8 and 16).
+
 ## Other operations
 
 2026-11-06 unless noted.

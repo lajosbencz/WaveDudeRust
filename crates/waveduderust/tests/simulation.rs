@@ -91,6 +91,40 @@ fn a_run_past_the_drains_keeps_every_reading() {
 	assert_eq!(lens, [(600, 0), (600, 0), (0, 200)]);
 }
 
+/// `run` hands the engine batches it may fuse (`WaveEngine::advance_steps`), each ending at a drain of the probe
+/// readings: the traces are those of one step at a time, every reading kept, within the rounding a fused sweep of a
+/// faster backend than the generic one may change (tests/rev2.rs; bit for bit there and in the run worker's tests).
+#[test]
+fn runs_in_batches_step_as_single_steps() {
+	let mut p = project();
+	p.simulation.steps = 600;
+	p.simulation.stencil = waveduderust::model::Stencil::NinePoint;
+	p.normalize();
+	let mut batched = cpu(&p);
+	for steps in [7, 250, 343] {
+		batched.run(steps).unwrap();
+	}
+	let mut single = cpu(&p);
+	for _ in 0..600 {
+		single.step().unwrap();
+	}
+	assert_eq!((batched.time(), single.time()), (600, 600));
+	let traces = |sim: &mut Simulation| sim.traces().unwrap().map(|(_, t)| t.clone()).collect::<Vec<_>>();
+	let (a, b) = (traces(&mut batched), traces(&mut single));
+	for (a, b) in a.iter().zip(&b) {
+		assert_eq!(
+			(a.series.len(), a.profiles.len(), a.steps_sampled),
+			(b.series.len(), b.profiles.len(), b.steps_sampled)
+		);
+		let peak = b.series.iter().fold(0f32, |m, v| m.max(v.abs()));
+		let diff = a.series.iter().zip(&b.series).fold(0f32, |m, (x, y)| m.max((x - y).abs()));
+		assert!(diff <= 1e-4 * peak, "the batched trace differs by {diff} of {peak}");
+	}
+	let (fa, fb) = (batched.field().unwrap().field, single.field().unwrap().field);
+	let peak = fb.iter().fold(0f32, |m, v| m.max(v.abs()));
+	assert!(peak > 0.0 && fa.iter().zip(&fb).all(|(x, y)| (x - y).abs() <= 1e-4 * peak));
+}
+
 #[test]
 fn the_intensity_is_there_only_when_tracked() {
 	let mut p = project();

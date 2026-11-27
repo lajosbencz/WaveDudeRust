@@ -66,6 +66,12 @@ impl Shared {
 		self.sources.values(out, self.time, k, self.sub_steps, self.scheme);
 	}
 
+	/// The source table of sub-step `k` of the step `ahead` steps after the one being taken, for engines that take
+	/// several steps at once; the sub-steps of the steps come in order.
+	pub(crate) fn source_values_ahead(&mut self, out: &mut [f32], ahead: u32, k: u32) {
+		self.sources.values(out, self.time + ahead, k, self.sub_steps, self.scheme);
+	}
+
 	/// Whether sub-step `k` advances the intensity stages: a step's last, when the intensity is tracked.
 	pub(crate) fn accumulates(&self, k: u32) -> bool {
 		self.options.track_intensity && k + 1 == self.sub_steps

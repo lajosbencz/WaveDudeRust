@@ -38,6 +38,7 @@ use super::super::cpu::Rows;
 use super::super::forcing::live;
 use super::super::mur::MurChain;
 use super::super::pml::{RimMemory, RimTables, XLine, XPass, XScratch};
+use super::super::shared::blend;
 use super::super::stencil::{PAD, TimeScheme, centred};
 use super::backend::{Intensity, RowKernels};
 use super::{DrpLine, NineLine};
@@ -498,17 +499,30 @@ pub(super) enum Line<'a, B> {
 	Drp(DrpLine<'a, B>, Shared),
 }
 
-/// A blocked step: what its units read and write. Level `j` lives in `planes[j % 2]`.
+/// Where a blocked sweep records the probe readings after each of its steps: `width` values a reading, the readings
+/// one after another in `out`, the cells by padded cell with their place in a reading and whether they read the
+/// intensity (blended with `scale`).
+pub(super) struct ProbeLog<'a> {
+	pub(super) cells: &'a [(usize, u32, bool)],
+	pub(super) out: Shared,
+	pub(super) width: usize,
+	pub(super) scale: f32,
+}
+
+/// A blocked sweep of one or more steps: what its units read and write. Level `j` lives in `planes[j % 2]`.
 pub(super) struct Step<'a, B> {
 	/// The backend; each unit runs through its row entry.
 	pub(super) kernels: B,
 	pub(super) s: usize,
 	pub(super) gw: usize,
 	pub(super) gh: usize,
+	/// The levels: the sub-steps of all the steps.
 	pub(super) n: usize,
+	/// The sub-steps of a step: level `j` ends a step when `j % sub == 0`.
+	pub(super) sub: usize,
 	/// The planes `u` and `prev` of the step's start.
 	pub(super) planes: [Shared; 2],
-	/// The intensity stages and their weight, advanced on level `n` when given.
+	/// The intensity stages and their weight, advanced on the last level of each step when given.
 	pub(super) stages: Option<(Shared, Shared, f32)>,
 	pub(super) alpha: f32,
 	pub(super) line: Line<'a, B>,
@@ -523,6 +537,8 @@ pub(super) struct Step<'a, B> {
 	pub(super) entries: &'a [u32],
 	pub(super) mur: &'a MurRows,
 	pub(super) rim: Option<Rim<'a>>,
+	/// Where the probe readings after each step go, when they are taken.
+	pub(super) probes: Option<ProbeLog<'a>>,
 }
 
 impl<B: RowKernels> Step<'_, B> {
@@ -671,7 +687,7 @@ impl<B: RowKernels> Step<'_, B> {
 		rim.tables.x_line(q, field, delta, memory, line, scratch, &rim.sets[set].pass);
 	}
 
-	/// The intensity stages of row `q` on level `n`.
+	/// The intensity stages of row `q` on the last level of a step.
 	///
 	/// # Safety
 	///
@@ -681,10 +697,34 @@ impl<B: RowKernels> Step<'_, B> {
 	#[allow(clippy::mut_from_ref)]
 	unsafe fn row_stages(&self, q: usize, j: usize) -> Option<(&mut [f32], &mut [f32])> {
 		let (s, r) = (self.s, q + PAD);
-		self.stages.filter(|_| j == self.n).map(|(s1, s2, _)| {
-			// SAFETY: the stages outlive the step, and the caller is the one update of row `q` to level `n`.
+		self.stages.filter(|_| j.is_multiple_of(self.sub)).map(|(s1, s2, _)| {
+			// SAFETY: the stages outlive the step, and the caller is the one update of row `q` to a step's last level,
+			// which runs after the update to the step's last level before on the row (it reads that field).
 			unsafe { (s1.get_mut(r * s..(r + 1) * s), s2.get_mut(r * s..(r + 1) * s)) }
 		})
+	}
+
+	/// Records the probe cells of row `q` after the update to level `j` when it ends a step: the field from `next` (the
+	/// padded row of level `j`), the intensity from the row's `stages` (0 when they are not tracked).
+	#[inline(always)]
+	fn record(&self, q: usize, j: usize, next: &[f32], stages: Option<(&[f32], &[f32])>) {
+		let Some(log) = self.probes.as_ref().filter(|_| j.is_multiple_of(self.sub)) else { return };
+		let at = (q + PAD) * self.s;
+		let first = log.cells.partition_point(|&(c, ..)| c < at);
+		let reading = (j / self.sub - 1) * log.width;
+		for &(cell, slot, intensity) in log.cells[first..].iter().take_while(|&&(c, ..)| c < at + self.s) {
+			let x = cell - at;
+			let value = match (intensity, stages) {
+				(false, _) => next[x],
+				(true, Some((s1, s2))) => blend(s1[x], s2[x], log.scale),
+				(true, None) => 0.0,
+			};
+			let slot = reading + slot as usize;
+			// SAFETY: the readings outlive the step; each value of a reading is of one cell, which only the update of
+			// its row to the step's last level records.
+			let out = unsafe { log.out.get_mut(slot..slot + 1) };
+			out[0] = value;
+		}
 	}
 
 	/// The 9-point's update of row `q` of the area to level `j`: `delta_y`, the leapfrog update, the rim's x part and
@@ -709,7 +749,8 @@ impl<B: RowKernels> Step<'_, B> {
 			stages.as_mut().map(|(s1, s2)| Intensity { s1: &mut s1[PAD..][..gw], s2: &mut s2[PAD..][..gw], alpha });
 		line.row(r, u, &mut next[PAD..][..gw], intensity);
 		self.x_part(0, q, u, strip, &mut next[PAD..][..gw], scratch);
-		self.force(q, j, next, stages);
+		self.force(q, j, next, stages.as_mut().map(|(s1, s2)| (&mut **s1, &mut **s2)));
+		self.record(q, j, next, stages.as_ref().map(|(s1, s2)| (&**s1, &**s2)));
 	}
 
 	/// The 4th order's `W(q, j)` on a row of the area: `w = c2 L u` from the field of level `j - 1`, with the rim's
@@ -771,6 +812,7 @@ impl<B: RowKernels> Step<'_, B> {
 		let rows: Rows<'_> = std::array::from_fn(|k| &wr[k * s..][..s]);
 		line.outer(r, &u[PAD..][..gw], &rows, &mut next[PAD..][..gw], intensity);
 		self.x_part(1, q, &wr[2 * s..5 * s], strip, &mut next[PAD..][..gw], scratch);
+		self.record(q, j, next, stages.as_ref().map(|(s1, s2)| (&**s1, &**s2)));
 	}
 
 	/// The driven cells of row `q`, with their runs of table entries.

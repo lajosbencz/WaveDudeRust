@@ -104,9 +104,14 @@ impl Captures {
 fn time_engine(engine: &mut dyn WaveEngine, shape: &FrameShape, steps: u32, captures_every: u32) -> Result<f64> {
 	let mut captures = Captures { shape: *shape, pending: None, spare: Vec::new() };
 	let mut run = |engine: &mut dyn WaveEngine, count: u32| -> Result<()> {
-		for i in 1..=count {
-			engine.advance_one_step()?;
-			if captures_every > 0 && i % captures_every == 0 {
+		// The steps up to the next capture in batches the engine may fuse, as a run does.
+		let mut done = 0;
+		while done < count {
+			let to_capture = if captures_every > 0 { captures_every - done % captures_every } else { count };
+			let k = (count - done).min(to_capture).min(engine.fused_steps().max(1));
+			engine.advance_steps(k, false)?;
+			done += k;
+			if captures_every > 0 && done % captures_every == 0 {
 				captures.take(engine)?;
 			}
 		}

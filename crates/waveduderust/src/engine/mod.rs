@@ -70,6 +70,24 @@ pub trait WaveEngine: MaybeSend {
 		Poll::Ready(())
 	}
 	fn advance_one_step(&mut self) -> Result<(), EngineError>;
+	/// The most steps [`advance_steps`](Self::advance_steps) is worth calling with: more than 1 for an engine that
+	/// fuses steps (the CPU_REV2 engine, rev2.rs), 1 for one that takes them one at a time. A caller batches its steps
+	/// up to it between the events that need the engine between steps (captures, probe drains, checks).
+	fn fused_steps(&self) -> u32 {
+		1
+	}
+	/// Advances `n` steps, queueing a probe reading after each when `probes`: `n` times
+	/// [`advance_one_step`](Self::advance_one_step), each followed by [`queue_probes`](Self::queue_probes) when
+	/// `probes`, with the same results, which an engine may compute in fewer sweeps over its planes.
+	fn advance_steps(&mut self, n: u32, probes: bool) -> Result<(), EngineError> {
+		for _ in 0..n {
+			self.advance_one_step()?;
+			if probes {
+				self.queue_probes()?;
+			}
+		}
+		Ok(())
+	}
 	/// Reads the probe cells after the last step, at once.
 	fn sample_probes(&mut self, out: &mut ProbeReadings) -> Result<(), EngineError>;
 	/// Queues a reading of the probe cells after the last step; the way to record every step, as an engine

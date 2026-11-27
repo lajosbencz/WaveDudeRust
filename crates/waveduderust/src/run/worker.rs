@@ -1146,7 +1146,9 @@ impl Worker {
 
 	/// Brings the engine to `steps` steps done (from 0 when it has passed them), recording probes and, with `passed`,
 	/// capturing missing stored frames on the way. A pause is honoured and the goal re-read every [`CHECK_INTERVAL`]
-	/// steps; the unit goes on only while [`still_wanted`](Self::still_wanted).
+	/// steps; the unit goes on only while [`still_wanted`](Self::still_wanted). The steps between those events go to
+	/// the engine in batches it may fuse ([`WaveEngine::advance_steps`]), so the frames and traces are those of one
+	/// step at a time.
 	fn advance_to(&mut self, steps: u32, unit: Unit, state: WorkState, passed: bool) -> Result<(), Interrupted> {
 		if self.steps_done > steps {
 			self.finish_pending(false)?;
@@ -1162,7 +1164,10 @@ impl Worker {
 		}
 		self.publish(state.clone());
 		let from = self.steps_done;
-		for i in from..steps {
+		// A step that may be captured after (decided before it).
+		let capture_step = |i: u32| passed && i + 1 < steps && i.is_multiple_of(capture_every);
+		let mut i = from;
+		while i < steps {
 			if (i - from).is_multiple_of(CHECK_INTERVAL) {
 				self.check_goal(unit, &state)?;
 			}
@@ -1171,22 +1176,28 @@ impl Worker {
 				return Err(Interrupted::Wait);
 			}
 			// Decided before the step: a capture left after it would cost a run from step 0.
-			let capturing = passed
-				&& i + 1 < steps
-				&& i.is_multiple_of(capture_every)
-				&& self.ready_to_capture(i / capture_every)?;
-			let probes = self.collector.is_some();
-			let engine = self.engine();
-			engine.advance_one_step()?;
-			if probes {
-				engine.queue_probes()?;
+			let capturing = capture_step(i) && self.ready_to_capture(i / capture_every)?;
+			// The steps up to the next that needs the worker between steps: one captured after, the goal's check
+			// before, the drain after; at most the engine's fused steps, which bounds the heartbeat's wait.
+			let limit = if capturing { 1 } else { self.engine().fused_steps().max(1) };
+			let mut end = i + 1;
+			while end < steps
+				&& end - i < limit
+				&& !(end - from).is_multiple_of(CHECK_INTERVAL)
+				&& !(end - from).is_multiple_of(PROBE_DRAIN)
+				&& !capture_step(end)
+			{
+				end += 1;
 			}
-			self.steps_done = i + 1;
+			let probes = self.collector.is_some();
+			self.engine().advance_steps(end - i, probes)?;
+			self.steps_done = end;
 			self.stepped = true;
 			if capturing {
 				self.capture(i / capture_every)?;
 			}
-			if (i + 1 - from).is_multiple_of(PROBE_DRAIN) {
+			i = end;
+			if (end - from).is_multiple_of(PROBE_DRAIN) {
 				self.record(every, false)?;
 			}
 			if self.last_beat.elapsed() >= HEARTBEAT {
@@ -1860,6 +1871,48 @@ mod tests {
 		pumped_to_the_end(&pumped);
 		assert_as_threaded(&pumped, &p);
 		assert_eq!(pumped.status().traces_steps, 300);
+	}
+
+	/// Steps fused into the CPU_REV2 engine's sweeps leave a run's frames and traces those of one step at a time: on
+	/// the generic backend, the legacy CPU engine's bit for bit, run to the end at once and pumped in short slices.
+	#[test]
+	fn fused_steps_leave_the_frames_and_traces_unchanged() {
+		use crate::engine::rev2::{Backend, CpuRev2Engine};
+		let fused: fn() -> PumpedFactory = || {
+			Box::new(|scene, options| -> EngineFuture {
+				Box::pin(async move {
+					let engine = CpuRev2Engine::with_backend(scene, options, Backend::Generic);
+					assert!(engine.fused_steps() > 1, "the steps are fused");
+					Box::new(engine) as Box<dyn WaveEngine>
+				})
+			})
+		};
+		for every in [1, 2, 13] {
+			let mut p = long(300);
+			p.simulation.stencil = crate::model::Stencil::NinePoint;
+			p.simulation.visualize_every = every;
+			p.probes.push(Probe { name: "I".into(), ax: 9, ay: 5, layer: Layer::Intensity, ..Probe::default() });
+			for budget in [Duration::ZERO, AMPLE] {
+				let (a, b) = (
+					RunWorker::pumped(cpu(), GIB, GIB, ample(), Arc::default()),
+					RunWorker::pumped(fused(), GIB, GIB, ample(), Arc::default()),
+				);
+				for w in [&a, &b] {
+					w.set_goal(goal(1, &p));
+					while pump(w, budget) != Pump::Idle {}
+				}
+				let (sa, sb) = (a.store().unwrap(), b.store().unwrap());
+				assert!(sa.is_complete() && sb.is_complete());
+				for frame in 0..sa.capacity() {
+					for &layer in sa.layers() {
+						let (x, y) = (sa.copy_layer(frame, layer).unwrap(), sb.copy_layer(frame, layer).unwrap());
+						assert!(x == y, "every {every}, {budget:?}: frame {frame} differs");
+					}
+				}
+				a.with_traces(|t| b.with_traces(|u| assert_eq!(t, u, "every {every}, {budget:?}")));
+				assert_eq!(b.status().traces_steps, 300);
+			}
+		}
 	}
 
 	fn ample() -> Box<dyn SpillFactory> {

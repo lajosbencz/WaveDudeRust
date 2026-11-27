@@ -160,6 +160,20 @@ impl Host {
 		self.probe_reading = reading;
 	}
 
+	/// The probe cells in reading order, each with whether it reads the intensity.
+	pub(super) fn probe_cells(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
+		self.probes.iter().flat_map(|(layer, cells)| cells.iter().map(move |&c| (c, *layer == Layer::Intensity)))
+	}
+
+	/// The probe readings now, a value per probe cell in reading order, into `out`.
+	pub(super) fn probe_values(&mut self, out: &mut Vec<f32>) {
+		let mut reading = std::mem::take(&mut self.probe_reading);
+		self.sample_probes(&mut reading);
+		out.clear();
+		out.extend_from_slice(reading.values());
+		self.probe_reading = reading;
+	}
+
 	pub(super) fn probe_queue(&mut self) -> &mut ProbeQueue {
 		&mut self.probe_queue
 	}
@@ -339,9 +353,14 @@ impl Host {
 /// `host`, named for logs by `$name`, a `fn(&Self) -> &'static str`. The type has `fn step(&mut self)`, the sub-steps
 /// of one step with the next field ending in `u` (`sub_steps_in_turn`, which the macro adds, runs them one by one
 /// through `fn sub_step(&mut self, intensity: bool)`), and `fn scene_loaded(&mut self)`, which rebuilds what it
-/// derives from the scene.
+/// derives from the scene. An engine that fuses steps gives `WaveEngine::fused_steps` and `advance_steps` as `$fused`,
+/// a `fn(&Self) -> u32`, and `$steps`, a `fn(&mut Self, u32, bool)`; by default it steps one at a time
+/// (`steps_in_turn`, which the macro adds).
 macro_rules! host_engine {
 	($engine:ty, $name:expr) => {
+		host_engine!($engine, $name, |_| 1, |engine, n, probes| engine.steps_in_turn(n, probes));
+	};
+	($engine:ty, $name:expr, $fused:expr, $steps:expr) => {
 		impl $engine {
 			/// Sets the field now and one sub-step before, each grid-sized (no padding), row-major.
 			/// For analytic tests that start from a given state.
@@ -367,6 +386,17 @@ macro_rules! host_engine {
 			pub fn advance_one_step(&mut self) {
 				self.step();
 				self.host.shared.time += 1;
+			}
+
+			/// `n` steps one after the other, each followed by a probe reading queued when `probes`.
+			#[allow(dead_code)]
+			fn steps_in_turn(&mut self, n: u32, probes: bool) {
+				for _ in 0..n {
+					self.advance_one_step();
+					if probes {
+						self.host.queue_probes();
+					}
+				}
 			}
 
 			/// The step's sub-steps one after the other, each with its source table.
@@ -449,6 +479,17 @@ macro_rules! host_engine {
 
 			fn advance_one_step(&mut self) -> Result<(), crate::engine::EngineError> {
 				<$engine>::advance_one_step(self);
+				Ok(())
+			}
+
+			fn fused_steps(&self) -> u32 {
+				let fused: fn(&Self) -> u32 = $fused;
+				fused(self)
+			}
+
+			fn advance_steps(&mut self, n: u32, probes: bool) -> Result<(), crate::engine::EngineError> {
+				let steps: fn(&mut Self, u32, bool) = $steps;
+				steps(self, n, probes);
 				Ok(())
 			}
 
