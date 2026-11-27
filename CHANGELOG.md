@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file, generated from 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3](https://github.com/lajosbencz/WaveDudeRust/compare/v0.4.2...v0.4.3) - 2026-11-27
+
+### Performance
+
+- *(core)* the CPU engine steps only the cells the wave has reached (#56)
+- *(core)* the CPU engine's CPML loops vectorise, natively and in wasm with simd128 (#57)
+
+### Dependencies
+
+- bump zip from 9.7.0 to 9.7.3 in the cargo-minor group (#60)
+- bump zip from 9.7.3 to 9.8.1 in the cargo-minor group (#64)
+
 ## [0.4.2](https://github.com/lajosbencz/WaveDudeRust/compare/v0.4.1...v0.4.2) - 2026-11-25
 
 ### Performance
