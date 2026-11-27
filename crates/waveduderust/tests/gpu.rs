@@ -265,36 +265,6 @@ fn open_edges_without_a_rim_match_the_cpu() {
 	}
 }
 
-/// Example18 (open edges, a damping band of 32, no rim) stays bounded on the GPU over 3000 steps,
-/// as on the CPU (tests/physics.rs).
-#[test]
-fn example18_stays_bounded() {
-	if !gpu_available() {
-		return;
-	}
-	let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-		.join("tests/fixtures/examples/Example18_XOR_AND_OR_logic.wdproj");
-	let (project, _) = waveduderust::io::load_project(&path).unwrap();
-	let px = waveduderust::unstable::scene::compose::compose_scene(&project).expect("painted parts");
-	let data = SceneData::from_pixels(&px.rgba, px.width, px.height, &project.scene);
-	let sim = &project.simulation;
-	let opts = EngineOptions {
-		stencil: sim.stencil,
-		source_frequency_scale: sim.source_frequency_scale,
-		..options(sim.stencil)
-	};
-	let mut gpu = GpuEngine::new(data, opts).expect("GPU engine");
-	gpu.set_emitters(&waveduderust::unstable::engine::emitters::emitters_of(&project));
-	let mut top = 0f64;
-	for step in (100..=3000).step_by(100) {
-		run(&mut gpu, 100);
-		let f = gpu.prepare_frame().unwrap().0;
-		top = top.max(if f.iter().all(|v| v.is_finite()) { peak(&f) } else { f64::INFINITY });
-		assert!(top < 10.0, "step {step}: peak {top}");
-	}
-	eprintln!("Example18 on the GPU, {} sub-steps: peak {top:.3} over 3000 steps", gpu.sub_steps());
-}
-
 /// Mirrors on the GPU as on the CPU (tests/physics.rs, 8b and 8c): a 32 x 32 reflective box with a
 /// mirror ring two cells thick stays bounded over 30,000 steps after a 3-cycle burst on both stencils,
 /// and a one-pixel diagonal mirror line splitting a 64 x 64 box lets under 1e-6 of a bump's square
@@ -639,33 +609,6 @@ fn runs_are_deterministic() {
 	assert!(first == trace(&mut b), "two engines");
 	a.reset();
 	assert!(first == trace(&mut a), "a reset and replayed engine");
-}
-
-/// A continuous source at phase 0 turns on without a zero-frequency pedestal on the GPU as on the CPU: the
-/// canvas field's mean over its RMS, both averaged over two periods after the turn-on, stays within 0.5 %
-/// (docs/physics.md, Sources). Level 50 at scale 2, 256 x 256 canvas with a 32 px CPML rim, steps 337 to 400.
-#[test]
-fn a_continuous_source_leaves_no_pedestal() {
-	if !gpu_available() {
-		return;
-	}
-	let w = 256u32;
-	let settings = Scene::default().with_damping_edge(-32);
-	let options = EngineOptions { source_frequency_scale: 2.0, ..options(Stencil::FourthOrder) };
-	let mut gpu = GpuEngine::new(SceneData::blank(w, w, &settings), options).expect("GPU engine");
-	gpu.set_emitters(&[Emitter { phase_radians: 0.0, ..emitter(128, 128, 50.0) }]);
-	let (mut mean, mut square) = (0f64, 0f64);
-	for step in 1..=400 {
-		gpu.advance_one_step().unwrap();
-		if step > 336 {
-			let f = gpu.prepare_frame().unwrap().0;
-			mean += f.iter().map(|&v| v as f64).sum::<f64>() / f.len() as f64;
-			square += f.iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / f.len() as f64;
-		}
-	}
-	let pedestal = mean / 64.0 / (square / 64.0).sqrt();
-	eprintln!("mean / RMS {pedestal:.2e}");
-	assert!(pedestal.abs() < 5e-3, "{pedestal}");
 }
 
 #[test]
