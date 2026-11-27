@@ -51,3 +51,39 @@ export struct ExportProgress {
     done: int,
     total: int,
 }
+
+// Whether the current scheme is among the user's; hidden: not a scheme, or no store to keep them.
+export enum Mine { hidden, no, yes }
+
+// Which menu commands can run (Next's CanExecute rules, docs/ui/10).
+export struct Commands {
+    can-undo: bool,
+    can-redo: bool,
+    // an object row is selected
+    can-delete: bool,
+    can-move-up: bool,
+    // any source, part or probe
+    can-select-all: bool,
+    // the current row is a source, a part or a probe
+    can-toggle: bool,
+    can-move-down: bool,
+    // an object or a settings row is selected
+    can-copy: bool,
+    // the current scheme among the user's
+    mine: Mine,
+    // the current probe's recording can go to a CSV file
+    can-export-csv: bool,
+    can-run: bool,
+    run-active: bool,
+    paused: bool,
+    // a run or an export is active
+    can-stop: bool,
+    // the run has frames and no export holds them
+    can-discard: bool,
+    can-export: bool,
+    can-export-last: bool,
+    // the project is not the blank one shown at start
+    can-close: bool,
+    can-play: bool,
+    playing: bool,
+}

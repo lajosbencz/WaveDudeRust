@@ -1,6 +1,6 @@
 import { Theme } from "theme.slint";
 import { ProgressIndicator } from "std-widgets.slint";
-import { Command, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
+import { Command, Commands, NewItem, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 // Selawik on every platform, Segoe UI's metric twin (docs/divergences.md, Font).
 import "../../../crates/waveduderust/assets/fonts/Selawik-Regular.ttf";
 import "../../../crates/waveduderust/assets/fonts/Selawik-Semibold.ttf";
@@ -10,8 +10,8 @@ import { MenuIcons } from "menu-icons.slint";
 import { EditKeys } from "edit-keys.slint";
 import { DockArea, DockGroup, DockSplitter, DockMetrics, DockPlace, DockPreview, DockSide } from "@slint-dock/dock.slint";
 import { ProjectTree, TreeRow, TreeKind, TreeWords } from "tree.slint";
-import { Form, NumberParse, Mine } from "form.slint";
-export { Form, NumberParse, Mine }
+import { Form, NumberParse } from "form.slint";
+export { Form, NumberParse }
 export { Words, ExportFileFormat } from "words.slint";
 import { Properties } from "properties.slint";
 import { Preview } from "preview.slint";
@@ -34,43 +34,10 @@ import { NumberSpec } from "number-box.slint";
 export { NumberLogic, NumberSpec } from "number-box.slint";
 export { ColorLogic, Hsv } from "color-picker.slint";
 export { Canvas, EdgeLine, GraphBox, GraphTick, HandleData, HandleGlyph, HandleKey, HoverTip, LabelData, OverlayArt, Rect, TipKind } from "canvas.slint";
-export { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
+export { Command, Commands, Mine, NewItem, FolderAdd, TreeKey, Pick, DropPlace, TransportAction, PreviewQuality, RunState, RunStatus, ExportProgress } from "commands.slint";
 export { MemoryWarningData, WarningAnswer, AboutData }
 export { Theme, TreeRow, TreeKind, Transport, Bracket, LogRow, LogLevel, LevelToggle, Modal, Message, Answer, ExampleRow, ExampleTopic }
 
-// The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
-// Which menu commands can run (Next's CanExecute rules, docs/ui/10).
-export struct Commands {
-    can-undo: bool,
-    can-redo: bool,
-    // an object row is selected
-    can-delete: bool,
-    can-move-up: bool,
-    // any source, part or probe
-    can-select-all: bool,
-    // the current row is a source, a part or a probe
-    can-toggle: bool,
-    can-move-down: bool,
-    // an object or a settings row is selected
-    can-copy: bool,
-    // the current scheme among the user's
-    mine: Mine,
-    // the current probe's recording can go to a CSV file
-    can-export-csv: bool,
-    can-run: bool,
-    run-active: bool,
-    paused: bool,
-    // a run or an export is active
-    can-stop: bool,
-    // the run has frames and no export holds them
-    can-discard: bool,
-    can-export: bool,
-    can-export-last: bool,
-    // the project is not the blank one shown at start
-    can-close: bool,
-    can-play: bool,
-    playing: bool,
-}
 
 // A pane's content at its place in the dock, cut off below its content's size as Next's grid cells do.
 component DockedPane inherits Rectangle {
@@ -87,6 +54,7 @@ component DockedPane inherits Rectangle {
     }
 }
 
+// The main window (docs/ui/00, Main window): menu bar, panes around the preview, status bar.
 export component AppWindow inherits Window {
     // the project's file: its name (empty without one), its full path, unsaved edits
     in property <string> file-name;
@@ -408,15 +376,8 @@ export component AppWindow inherits Window {
                                 expand(i) => { root.tree-expand(i); }
                                 shift(i, by) => { root.tree-shift(i, by); }
                                 remove(i) => { root.tree-remove(i); }
-                                can-move-up: root.commands.can-move-up;
-                                can-move-down: root.commands.can-move-down;
-                                can-remove: root.commands.can-delete;
-                                can-copy: root.commands.can-copy;
-                                mine: root.commands.mine;
-                                can-export-csv: root.commands.can-export-csv;
+                                commands: root.commands;
                                 probe-row: root.props-kind == TreeKind.probe;
-                                can-select-all: root.commands.can-select-all;
-                                can-toggle: root.commands.can-toggle;
                                 act(c) => { root.command(c); }
                                 add-item(item) => { root.add(item); }
                                 navigate(key, extend) => { root.tree-navigate(key, extend); }

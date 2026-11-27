@@ -2,8 +2,8 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icon, IconButton } from "icons.slint";
 import { MenuIcons } from "menu-icons.slint";
-import { Command, NewItem, FolderAdd, TreeKey, Pick, DropPlace } from "commands.slint";
-import { Form, Mine } from "form.slint";
+import { Command, Commands, Mine, NewItem, FolderAdd, TreeKey, Pick, DropPlace } from "commands.slint";
+import { Form } from "form.slint";
 
 // An add menu's entry.
 struct AddKind {
@@ -197,18 +197,9 @@ export component ProjectTree inherits Rectangle {
     callback expand(int);
     callback shift(int, int);
     callback remove(int);
-    in property <bool> can-move-up;
-    in property <bool> can-move-down;
-    in property <bool> can-remove;
-    in property <bool> can-copy;
-    in property <bool> can-select-all;
-    // the current row can be switched on and off and join a group
-    in property <bool> can-toggle;
-    // the current scheme among the user's
-    in property <Mine> mine;
-    // a probe row: its menu offers the CSV export, enabled by this
+    in property <Commands> commands;
+    // a probe row: its menu offers the CSV export
     in property <bool> probe-row;
-    in property <bool> can-export-csv;
     // a command on the current row
     callback act(Command);
     callback add-item(NewItem);
@@ -272,9 +263,9 @@ export component ProjectTree inherits Rectangle {
                     parts := PartMenu { add(id) => { root.add(id); } }
                 }
                 Rectangle { width: 9px; Rectangle { x: 4px; width: 1px; height: parent.height - 4px; background: Theme.border; } }
-                IconButton { icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); enabled: root.can-move-up; clicked => { root.run(Command.move-up); } }
-                IconButton { icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); enabled: root.can-move-down; clicked => { root.run(Command.move-down); } }
-                IconButton { icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); enabled: root.can-remove; clicked => { root.run(Command.delete); } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-up.svg"); tip: @tr("Move up (Alt+Up); drag to reorder"); enabled: root.commands.can-move-up; clicked => { root.run(Command.move-up); } }
+                IconButton { icon: @image-url("icons/next/tree-chevron-down.svg"); tip: @tr("Move down (Alt+Down); drag to reorder"); enabled: root.commands.can-move-down; clicked => { root.run(Command.move-down); } }
+                IconButton { icon: @image-url("icons/next/tree-minus.svg"); tip: @tr("Remove (Del)"); enabled: root.commands.can-delete; clicked => { root.run(Command.delete); } }
             }
             Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border; }
         }
@@ -348,28 +339,28 @@ export component ProjectTree inherits Rectangle {
                             }
                         }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Add to or remove from selection"); icon: MenuIcons.checklist; enabled: root.can-toggle; activated => { root.run(Command.toggle-selected); } }
-                        MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; enabled: root.can-select-all; activated => { root.run(Command.select-all); } }
+                        MenuItem { title: @tr("Add to or remove from selection"); icon: MenuIcons.checklist; enabled: root.commands.can-toggle; activated => { root.run(Command.toggle-selected); } }
+                        MenuItem { title: @tr("Select all"); icon: MenuIcons.select-all; enabled: root.commands.can-select-all; activated => { root.run(Command.select-all); } }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Enabled"); icon: MenuIcons.check-box; enabled: root.can-toggle; activated => { root.run(Command.toggle-enabled); } }
-                        MenuItem { title: @tr("Duplicate"); icon: MenuIcons.control-point-duplicate; enabled: root.can-remove; activated => { root.run(Command.duplicate); } }
-                        MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; enabled: root.can-remove; activated => { root.run(Command.cut); } }
-                        MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; enabled: root.can-copy; activated => { root.run(Command.copy); } }
+                        MenuItem { title: @tr("Enabled"); icon: MenuIcons.check-box; enabled: root.commands.can-toggle; activated => { root.run(Command.toggle-enabled); } }
+                        MenuItem { title: @tr("Duplicate"); icon: MenuIcons.control-point-duplicate; enabled: root.commands.can-delete; activated => { root.run(Command.duplicate); } }
+                        MenuItem { title: @tr("Cut"); icon: MenuIcons.content-cut; enabled: root.commands.can-delete; activated => { root.run(Command.cut); } }
+                        MenuItem { title: @tr("Copy"); icon: MenuIcons.content-copy; enabled: root.commands.can-copy; activated => { root.run(Command.copy); } }
                         MenuItem { title: @tr("Paste"); icon: MenuIcons.content-paste; enabled: true; activated => { root.run(Command.paste); } }
-                        MenuItem { title: @tr("Remove"); icon: MenuIcons.delete; enabled: root.can-remove; activated => { root.run(Command.delete); } }
+                        MenuItem { title: @tr("Remove"); icon: MenuIcons.delete; enabled: root.commands.can-delete; activated => { root.run(Command.delete); } }
                         MenuSeparator { }
-                        MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.can-move-up; activated => { root.run(Command.move-up); } }
-                        MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.can-move-down; activated => { root.run(Command.move-down); } }
+                        MenuItem { title: @tr("Move up"); icon: MenuIcons.arrow-upward; enabled: root.commands.can-move-up; activated => { root.run(Command.move-up); } }
+                        MenuItem { title: @tr("Move down"); icon: MenuIcons.arrow-downward; enabled: root.commands.can-move-down; activated => { root.run(Command.move-down); } }
                         if root.probe-row: MenuSeparator { }
                         if root.probe-row: MenuItem {
                             title: @tr("Export probe data as CSV...");
                             icon: MenuIcons.ios-share;
-                            enabled: root.can-export-csv;
+                            enabled: root.commands.can-export-csv;
                             activated => { root.run(Command.export-probe-csv); }
                         }
-                        if root.mine != Mine.hidden: MenuSeparator { }
-                        if root.mine != Mine.hidden: MenuItem {
-                            title: root.mine == Mine.yes ? @tr("Remove from my schemes") : @tr("Add to my schemes");
+                        if root.commands.mine != Mine.hidden: MenuSeparator { }
+                        if root.commands.mine != Mine.hidden: MenuItem {
+                            title: root.commands.mine == Mine.yes ? @tr("Remove from my schemes") : @tr("Add to my schemes");
                             activated => { root.run(Command.toggle-mine); }
                         }
                     }

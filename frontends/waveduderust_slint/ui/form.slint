@@ -4,9 +4,7 @@ import { Theme } from "theme.slint";
 import { NumberBox, NumberSpec } from "number-box.slint";
 import { FormKind, ProjectData, SceneData, SimulationData, DisplayData, LayerData, VideoData, SourceData, ArrayData, ProbeData, PartData, MaterialData, CoatingData, SidesData, TriangleData, PolygonData, LensData, FresnelData, DiffuserData, ZonePlateData, BraggData, GrinData, GratingData, FacetData, MetaData, GateData, FilterData, FilterLayerData, FiberData, FiberNodeData, SchemeData, StopData, SchemeChoice, PointData, Layer } from "data.slint";
 import { EditKeys, EditLine } from "edit-keys.slint";
-
-// Whether the current scheme is among the user's; hidden: not a scheme, or no store to keep them.
-export enum Mine { hidden, no, yes }
+import { Mine } from "commands.slint";
 
 // The shown object's form data, typed (ui/data.slint); editors bind two-way to its fields and report each commit.
 export global Form {
