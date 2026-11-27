@@ -124,16 +124,22 @@ fn reduced_run_schedule() {
 }
 
 #[test]
-fn spec_snapshot() {
-	let mut p = with_probes(project(64, 48, 21));
+fn a_spec_takes_its_frames_probes_layers_brightness_and_grid_from_the_project() {
+	let p = with_probes(project(64, 48, 21));
 	let s = spec(&p, PreviewQuality::FULL);
 	assert_eq!(s.schedule.frame_count(), 11, "ceil(21 / 2)");
 	assert_eq!(s.probes.len(), 3, "inactive probes left out");
 	assert_eq!(s.layers(), &[Layer::Field, Layer::Intensity]);
-	let mut v = View::default();
+	let v = View::default();
 	let brightness = (v.field.brightness as f32, v.intensity.brightness as f32);
 	assert_eq!((s.shape.field_brightness, s.shape.intensity_brightness), brightness);
 	assert_eq!((s.scene.grid_width(), s.scene.rim), (72, 4));
+}
+
+#[test]
+fn a_hidden_intensity_without_probes_drops_its_layer_and_an_image_scene_needs_its_image() {
+	let mut p = with_probes(project(64, 48, 21));
+	let mut v = View::default();
 	v.intensity.preview = false;
 	p.probes.clear();
 	assert_eq!(spec_with(&p, &v, PreviewQuality::FULL).layers(), &[Layer::Field]);
