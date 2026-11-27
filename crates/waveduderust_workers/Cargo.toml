@@ -19,7 +19,7 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "registry", "std"] }
 tracing-web.workspace = true
 wasm-bindgen-futures.workspace = true
-waveduderust = { path = "../waveduderust", default-features = false, features = ["run", "unstable-run"] }
+waveduderust = { path = "../waveduderust", default-features = false, features = ["unstable-engine", "unstable-run"] }
 waveduderust_remote = { path = "../waveduderust_remote" }
 web-time.workspace = true
 web-sys = { workspace = true, features = [

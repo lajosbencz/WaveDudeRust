@@ -26,7 +26,7 @@ sys-locale = "0.3"
 webbrowser = "1"
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "std", "ansi", "registry"] }
-waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["gpu", "run", "unstable-engine", "unstable-reflect", "unstable-run", "unstable-scene"] }
+waveduderust = { path = "../../crates/waveduderust", default-features = false, features = ["gpu", "unstable-export", "unstable-reflect", "unstable-scene"] }
 web-time.workspace = true
 rfd = "0.18"
 # the Messages pane's Regex search; already in the tree
