@@ -149,8 +149,9 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 /// faster than the portable code (natively, on x86-64 with AVX2 and FMA), else the legacy one ([`cpu::CpuEngine`]),
 /// whose results the CPU_REV2 engine's generic backend repeats bit for bit and its faster backends within rounding.
 /// The environment variable `WAVEDUDE_CPU_ENGINE` overrides it natively ([`rev2_choice`]), and the legacy engine
-/// switched on ([`set_legacy_cpu_engine`]) overrides both. The web builds the legacy engine until the CPU_REV2 engine
-/// has a backend there.
+/// switched on ([`set_legacy_cpu_engine`]) overrides both. The web builds the legacy engine: the CPU_REV2 engine's
+/// simd128 backend (wasm built with simd128) is not chosen here yet (docs/measurements.md, The CPU_REV2 engine in
+/// wasm).
 fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
 	if let Some(backend) = rev2_backend() {
 		return Box::new(rev2::CpuRev2Engine::with_backend(scene, options, backend));

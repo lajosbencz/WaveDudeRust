@@ -574,7 +574,7 @@ impl<B: RowKernels> Step<'_, B> {
 	/// Unit `unit` of row `q` and level `j`.
 	fn unit(&self, unit: Unit, q: usize, j: usize, lane: &mut Lane<'_>) {
 		self.kernels.run_row(
-			#[inline(always)]
+			#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 			|| match unit {
 				Unit::Psi(set) => self.psi(set, q, j, lane),
 				Unit::Lap => {
@@ -606,7 +606,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// psi of y of application `set` on y-strip row `q` of the area; nothing on other rows. A band's units of the 4th
 	/// order's second application take `w` from the band's ring.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn psi(&self, set: usize, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let Some(rim) = &self.rim else { return };
 		let Some(k) = rim.tables.strip_row(q).filter(|_| self.area.contains(&q)) else { return };
@@ -624,7 +624,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// xi of y and `delta_y` of application `set` on row `q` when it is a y-strip row, from the 7 rows `field` around
 	/// it; the row's y-strip row.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn delta(&self, set: usize, q: usize, field: &[f32]) -> Option<usize> {
 		let rim = self.rim.as_ref()?;
 		let k = rim.tables.strip_row(q)?;
@@ -644,7 +644,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// The x part of application `set` on row `q`, `line` its grid cells: psi of x and the correction from the 3 rows
 	/// `field` from the one above, and from the row's `delta_y` when `strip` gives its y-strip row.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn x_part(
 		&self,
 		set: usize,
@@ -689,7 +689,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// The 9-point's update of row `q` of the area to level `j`: `delta_y`, the leapfrog update, the rim's x part and
 	/// the forcing.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn leapfrog(&self, line: &NineLine<'_, B>, q: usize, j: usize, scratch: &mut Option<XScratch>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
@@ -716,7 +716,7 @@ impl<B: RowKernels> Step<'_, B> {
 	/// first application (`delta_y` and the x part), then the forcing of sub-step `j - 1` on its driven cells.
 	///
 	/// A band writes `w` into its ring, and the rows a seam's units read to the plane too; a seam into the plane.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn lap(&self, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let Line::Drp(line, w) = &self.line else { return };
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
@@ -748,7 +748,7 @@ impl<B: RowKernels> Step<'_, B> {
 	/// the outer update (the intensity stages on level `n`), the x part.
 	///
 	/// A band takes `w` from its ring, a seam from the plane.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn outer(&self, line: &DrpLine<'_, B>, w: Shared, q: usize, j: usize, lane: &mut Lane<'_>) {
 		let (s, gw, r) = (self.s, self.gw, q + PAD);
 		let (src, dst) = (self.planes[(j - 1) % 2], self.planes[j % 2]);
@@ -783,7 +783,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// Adds `F` of sub-step `j - 1` to the driven cells of row `q` of `w` (the padded row): host.rs's `force_w` on the
 	/// row.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn force_w(&self, q: usize, j: usize, w: &mut [f32]) {
 		let (at, table) = ((q + PAD) * self.s, &self.tables[j - 1]);
 		for &(cell, start, len) in self.driven_in(q) {
@@ -802,7 +802,7 @@ impl<B: RowKernels> Step<'_, B> {
 
 	/// Adds `h F` of sub-step `j - 1` to the driven cells of row `q` of `next` (the padded row), and moves their
 	/// intensity stages, when given, to the forced value: host.rs's `force_next` on the row.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn force(&self, q: usize, j: usize, next: &mut [f32], mut stages: Option<(&mut [f32], &mut [f32])>) {
 		let (at, table, rest) = ((q + PAD) * self.s, &self.tables[j - 1], 1.0 - self.alpha);
 		for &(cell, start, len) in self.driven_in(q) {
@@ -830,7 +830,7 @@ impl<B: RowKernels> Step<'_, B> {
 	}
 
 	/// Mur's condition on the chains row `q` owns, on level `j`: host.rs's `apply_open_edges` on them.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn open_edges(&self, q: usize, j: usize) {
 		let chains = self.mur.row(q);
 		if chains.is_empty() {

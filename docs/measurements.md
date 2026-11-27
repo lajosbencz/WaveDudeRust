@@ -445,6 +445,59 @@ second. Example09 (9-point, no mirror): simd128 doubles the steps at e4475b7 and
 nothing. The author's Example09 figures were taken in the browser's
 whole app and are not split by simd128.
 
+## The CPU_REV2 engine in wasm
+
+2026-11-27, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs), Node 22.22.1 (V8 12.4). A harness outside
+the repository (a `cdylib` on `waveduderust` with `unstable-engine`, `lto = "thin"`, `codegen-units = 1`) builds the
+legacy CPU engine and the CPU_REV2 engine on its generic and its simd128 backend in one wasm module, with
+`-C target-feature=+simd128`, `wasm-bindgen --target nodejs`, `wasm-opt -O3 --all-features`. A blank scene, one
+Gaussian source in the middle, intensity on; 800x600, rim 0 or a CPML rim of 32; 300 steps to warm up, then 5 runs of
+30 steps timed, `taskset -c 5`, ms a step, the median of 3 processes per engine, alternating. wasm has no threads
+here: rayon runs its pool's work on the calling thread (`rayon::current_num_threads()` is 1), so both engines run on
+one thread.
+
+| Stencil, rim | Legacy CPU engine | CPU_REV2, generic | CPU_REV2, simd128 | simd128, forced inlining |
+|---|---|---|---|---|
+| 9-point, rim 0 | 1.544 | 1.612 (1.04) | 1.637 (1.06) | 1.594 (1.03) |
+| 9-point, rim 32 | 3.717 | 3.404 (0.92) | 3.312 (0.89) | 3.309 (0.89) |
+| 4th order, rim 0 | 3.475 | 15.514 (4.46) | 3.516 (1.01) | 3.465 (1.00) |
+| 4th order, rim 32 | 7.810 | 21.377 (2.74) | 6.627 (0.85) | 6.572 (0.84) |
+
+In brackets: against the legacy engine. The scene takes 2 sub-steps, so the CPU_REV2 engine runs its blocked steps. The
+run worker the web build ships with simd128 is 24 bytes larger (3613727 bytes before `wasm-bindgen`): it builds the
+legacy engine, and the CPU_REV2 engine is unreachable there.
+
+The simd128 backend (engine/rev2/backend/simd128.rs) computes the generic backend's values, so the CPU engine's, bit for
+bit: its lane kernels keep the generic expressions in their order, and simd128 has no fused multiply-add. The harness
+steps two engines side by side and compares the padded field and both intensity stages: simd128 against generic,
+generic against legacy, and simd128 against legacy, 300x200, 400 steps, both stencils, rim 0, a CPML rim of 32 and an
+inside damping band of 6 (a medium per cell, the planes' kernels): all bit for bit equal. Native tests run the same
+lane kernels on a portable 4-lane type against the generic backend bit for bit (lanes.rs); the simd128 backend's own
+unit test runs only in wasm, and tests/rev2.rs (an 8-thread pool) would need adapting for single-threaded wasm, so
+until web tests run this harness is its check.
+
+The generic backend's 4th order is slow in wasm: its DRP bodies stay scalar there, where the legacy engine's DRP span
+vectorises ([The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm)).
+
+Inlining: the orchestration's closures and row functions are `#[inline(always)]` natively, so the code a backend's
+`#[target_feature]` entry runs takes its instruction set. In wasm the module's instruction set is everywhere, and
+forcing them grew the harness's wasm from 669877 to 685381 bytes (2.3 %) for 0 to 3 % (the last column; in an earlier
+run of the same comparison with the pairs below, -1 to +2 %), within the runs' spread, so they are inlined by force
+only off wasm (`#[cfg_attr(not(target_arch = "wasm32"), inline(always))]`), as engine/isa.rs found for the CPU engine.
+
+8 cells per iteration, as two `v128`s side by side (each operation on both 4-cell groups in a row, what V8's
+experimental revectorization to 256-bit instructions fuses, `--experimental-wasm-revectorize`, off by default), gained
+nothing on the 9-point kernel (1.60 against 1.59 ms at rim 0) and lost on the DRP kernels (3.77 against 3.39 ms at rim
+0, 6.69 against 6.34 at rim 32), likely as a pair with the DRP kernels' constants needs more than x86-64's 16 xmm
+registers. With the pairs the DRP kernels also gave a field that differed from the other engines' in a few cells from
+some step on (by about 1e-4 of the cell's value at first) in 7 to 47 % of fresh engines stepped 450 times in one
+process (the most with `--liftoff-only`, also with `--no-liftoff` and `--no-wasm-stack-checks`), on different
+iterations from run to run, while wasm's semantics are deterministic and the generic and legacy engines and the 9-point
+kernel never diverged; with one `v128` per iteration none of 120 diverged (Liftoff only and TurboFan only, rim 0 and
+32, 30 each). Not explained: V8 12.4's code under that register pressure, or this guest's handling of the xmm state
+(microcode 0x860010d); natively the AVX2 and generic backends gave one hash in 30 runs each. Before the CPU_REV2 engine
+runs in the browser, the comparison should be repeated on another machine and in a browser's V8.
+
 ## Other operations
 
 2026-11-06 unless noted.

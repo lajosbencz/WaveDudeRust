@@ -1,6 +1,7 @@
 //! The unit tests' harness of the backends: a backend's kernels against the generic backend's on random spans, within
 //! a few ulps of the magnitudes each value is computed from, and with guard cells around every output that no kernel
-//! may touch. A backend's tests call [`nine_matches_generic`] and [`drp_match_generic`] with a value of it.
+//! may touch. A backend's tests call [`nine_matches_generic`] and [`drp_match_generic`] with a value of it, or
+//! [`nine_is_generic`] and [`drp_is_generic`] when it computes the generic backend's values bit for bit.
 
 use super::generic::Generic;
 use super::{Intensity, RowKernels, RowMedium};
@@ -18,6 +19,25 @@ impl Values {
 
 	fn take(&mut self, n: usize, f: impl Fn(f32) -> f32) -> Vec<f32> {
 		(0..n).map(|_| f(self.next())).collect()
+	}
+}
+
+/// How close a backend's values must be to the generic backend's.
+#[derive(Clone, Copy)]
+enum Match {
+	/// Within a few ulps of the magnitude a value is computed from.
+	Ulps,
+	/// The same bits.
+	Bits,
+}
+
+impl Match {
+	/// Whether `got` matches the generic backend's `want`, computed from magnitudes up to `scale`.
+	fn holds(self, got: f32, want: f32, scale: f32) -> bool {
+		match self {
+			Self::Ulps => (got - want).abs() <= 8.0 * f32::EPSILON * scale,
+			Self::Bits => got.to_bits() == want.to_bits(),
+		}
 	}
 }
 
@@ -80,16 +100,14 @@ impl Case {
 		out
 	}
 
-	/// Checks `got` against the generic backend's `want`: within a few ulps of the magnitudes each value is
-	/// computed from, and the guards untouched.
-	fn check(&self, got: &Outputs, want: &Outputs, what: &str) {
+	/// Checks `got` against the generic backend's `want` as `how` says, and the guards untouched.
+	fn check(&self, got: &Outputs, want: &Outputs, how: Match, what: &str) {
 		let len = self.before.len();
 		for (name, g) in [("next", &got.next), ("s1", &got.s1), ("s2", &got.s2)] {
 			assert_eq!(g.len(), len + 2 * SIDE);
 			let guards = g[..SIDE].iter().chain(&g[SIDE + len..]);
 			assert!(guards.into_iter().all(|&v| v == GUARD), "{what}: {name} written outside the span");
 		}
-		let ulps = 8.0 * f32::EPSILON;
 		for x in 0..len {
 			let field =
 				(0..3).flat_map(|r| self.rows[r][x..x + 3].iter()).fold(self.before[x].abs(), |m, v| m.max(v.abs()));
@@ -101,7 +119,7 @@ impl Case {
 				("s1", got.s1[at], want.s1[at], s1),
 				("s2", got.s2[at], want.s2[at], s2),
 			] {
-				assert!((g - w).abs() <= ulps * scale, "{what}: {name} at {x} is {g}, the generic backend's {w}");
+				assert!(how.holds(g, w, scale), "{what}: {name} at {x} is {g}, the generic backend's {w}");
 			}
 		}
 	}
@@ -110,12 +128,22 @@ impl Case {
 /// Asserts `kernels`' 9-point kernel computes the generic backend's values within a few ulps and writes only its
 /// span, on spans of 0 to 39 cells and two long ones, on either medium, with and without the stages.
 pub(crate) fn nine_matches_generic(kernels: impl RowKernels) {
+	nine_against_generic(kernels, Match::Ulps);
+}
+
+/// Asserts `kernels`' 9-point kernel computes the generic backend's values bit for bit and writes only its span, on
+/// the spans of [`nine_matches_generic`].
+pub(crate) fn nine_is_generic(kernels: impl RowKernels) {
+	nine_against_generic(kernels, Match::Bits);
+}
+
+fn nine_against_generic(kernels: impl RowKernels, how: Match) {
 	let mut values = Values(0x9e37_79b9);
 	for len in (0..40).chain([1000, 1003]) {
 		for (uniform, stages) in [(false, false), (false, true), (true, false), (true, true)] {
 			let case = Case::new(&mut values, len, uniform, stages);
 			let what = format!("{len} cells, uniform {uniform}, stages {stages}");
-			case.check(&case.run(kernels), &case.run(Generic), &what);
+			case.check(&case.run(kernels), &case.run(Generic), how, &what);
 		}
 	}
 }
@@ -203,8 +231,17 @@ fn guards_kept(got: &[f32], len: usize, what: &str) {
 /// Asserts `kernels`' DRP kernels compute the generic backend's values within a few ulps and write only their span,
 /// on spans of 0 to 39 cells and two long ones, rows at two strides, on either medium, with and without the stages.
 pub(crate) fn drp_match_generic(kernels: impl RowKernels) {
+	drp_against_generic(kernels, Match::Ulps);
+}
+
+/// Asserts `kernels`' DRP kernels compute the generic backend's values bit for bit and write only their span, on the
+/// spans of [`drp_match_generic`].
+pub(crate) fn drp_is_generic(kernels: impl RowKernels) {
+	drp_against_generic(kernels, Match::Bits);
+}
+
+fn drp_against_generic(kernels: impl RowKernels, how: Match) {
 	let mut values = Values(0x2545_f491);
-	let ulps = 8.0 * f32::EPSILON;
 	for len in (0..40).chain([1000, 1003]) {
 		// Rows a plane's stride apart, at two strides, as the engine hands them over (its rows come from one plane
 		// or one buffer).
@@ -217,7 +254,7 @@ pub(crate) fn drp_match_generic(kernels: impl RowKernels) {
 				for x in 0..len {
 					let (g, w, scale) =
 						(got[SIDE + x], want[SIDE + x], case.lap_scale(x) * case.c2[x.min(case.c2.len() - 1)]);
-					assert!((g - w).abs() <= ulps * scale, "lap, {what}: {g} at {x}, the generic backend's {w}");
+					assert!(how.holds(g, w, scale), "lap, {what}: {g} at {x}, the generic backend's {w}");
 				}
 				let (got, want) = (case.outer(kernels), case.outer(Generic));
 				for (name, g) in [("next", &got.next), ("s1", &got.s1), ("s2", &got.s2)] {
@@ -236,7 +273,7 @@ pub(crate) fn drp_match_generic(kernels: impl RowKernels) {
 						("s2", got.s2[at], want.s2[at], s2),
 					] {
 						assert!(
-							(g - w).abs() <= ulps * scale,
+							how.holds(g, w, scale),
 							"outer, {what}: {name} at {x} is {g}, the generic backend's {w}"
 						);
 					}

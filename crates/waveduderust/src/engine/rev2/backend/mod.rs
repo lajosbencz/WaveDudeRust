@@ -5,6 +5,8 @@
 //!
 //! - `generic` (generic.rs): safe, portable Rust, every target. The reference: bit for bit the CPU engine's values.
 //! - `avx2` (avx2.rs, x86-64): inline assembly on AVX2 and FMA, when the CPU has them.
+//! - `simd128` (simd128.rs, wasm32 built with simd128): `core::arch::wasm32` intrinsics, 4 lanes, bit for bit the
+//!   generic backend's values; its kernels are written once over a vector of lanes (lanes.rs).
 //!
 //! # A trait, not a table of function pointers
 //!
@@ -64,23 +66,22 @@
 //!
 //! The entry: the engine calls the kernels only inside [`RowKernels::run_row`] of the same backend value, which wraps
 //! a whole row's work (the kernels, the cut cells, the CPML's row, the forcing, Mur's condition) with closures marked
-//! `#[inline(always)]`. A backend with a `#[target_feature]` instruction set runs the closure inlined into such a
-//! function (avx2.rs); the generic backend through the CPU engine's dispatch (engine/isa.rs, a plain call off x86-64).
-//! The kernels must also be right when called outside it (the unit tests do).
+//! `#[inline(always)]`, except in wasm (there the module's instruction set is the code's everywhere, and forcing them
+//! grew the wasm by 2 % for at most 3 %, within the runs' spread; docs/measurements.md, The CPU_REV2 engine in wasm).
+//! A backend with a `#[target_feature]` instruction set runs the closure inlined into such a function (avx2.rs); the
+//! generic backend through the CPU engine's dispatch (engine/isa.rs, a plain call off x86-64), the simd128 backend
+//! through a plain call. The kernels must also be right when called outside it (the unit tests do).
 //!
 //! # Adding a backend
 //!
 //! One file implementing [`RowKernels`] (its module gated by `#[cfg]` on its target), and its entries here: its module,
 //! a [`Backend`] variant, its place in [`Backend::ALL`] (best first) and an arm in [`on_backend`]. Nothing in the
 //! orchestration changes. Its unit tests call the harness (backend/harness.rs) with a value of it, as avx2.rs's do;
-//! tests/rev2.rs runs every available backend of [`Backend::ALL`] against the CPU engine. Planned:
+//! tests/rev2.rs runs every available backend of [`Backend::ALL`] against the CPU engine. Both run natively only, so
+//! the simd128 backend is checked in Node until the web tests run (simd128.rs). Planned:
 //!
-//! - `sse2` (x86 and x86-64): 4 lanes, no FMA; `std::arch` intrinsics or inline assembly, `run_row` a plain call (SSE2
-//!   is the x86-64 baseline). Without fused multiply-adds, and in the generic backend's order, it could even stay bit
-//!   for bit the CPU engine's.
-//! - `simd128` (wasm32 with `target_feature = "simd128"`): `core::arch::wasm32` intrinsics (no inline assembly in
-//!   wasm), chosen at compile time, as wasm has no run-time feature test: `new` is `Some` always, `run_row` a plain
-//!   call. The engine would then also be wired into the web worker, which does not build it yet.
+//! - `sse2` (x86 and x86-64): 4 lanes, no FMA, `run_row` a plain call (SSE2 is the x86-64 baseline): the lane
+//!   kernels of lanes.rs on `__m128`, as the simd128 backend runs them on `v128`, bit for bit the CPU engine's.
 //! - `neon` (aarch64, and 32-bit ARM with NEON): `core::arch::aarch64` intrinsics or inline assembly, 4 lanes, `vfmaq`
 //!   for the multiply-adds. Plain VFP (32-bit ARM without NEON) is scalar: the generic backend already compiles to it,
 //!   and a `vfp` backend would pay only with hand-scheduled code.
@@ -90,6 +91,10 @@ pub(crate) mod avx2;
 pub(crate) mod generic;
 #[cfg(test)]
 mod harness;
+#[cfg(any(test, all(target_arch = "wasm32", target_feature = "simd128")))]
+mod lanes;
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+pub(crate) mod simd128;
 
 /// The intensity's two EMA stages of the cells a kernel writes, advanced by the values written, and their weight.
 pub(crate) struct Intensity<'a> {
@@ -182,6 +187,11 @@ macro_rules! on_backend {
 				type $B = $crate::engine::rev2::backend::avx2::Avx2;
 				$body
 			}
+			#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+			$crate::engine::rev2::Backend::Simd128 => {
+				type $B = $crate::engine::rev2::backend::simd128::Simd128;
+				$body
+			}
 		}
 	};
 }
@@ -198,6 +208,9 @@ pub enum Backend {
 	/// Inline assembly on AVX2 and FMA (x86-64).
 	#[cfg(target_arch = "x86_64")]
 	Avx2,
+	/// `core::arch::wasm32` intrinsics on simd128 (wasm32 built with simd128): bit for bit the CPU engine's values.
+	#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+	Simd128,
 }
 
 impl Backend {
@@ -205,6 +218,8 @@ impl Backend {
 	pub const ALL: &'static [Self] = &[
 		#[cfg(target_arch = "x86_64")]
 		Self::Avx2,
+		#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+		Self::Simd128,
 		Self::Generic,
 	];
 
@@ -218,7 +233,7 @@ impl Backend {
 		on_backend!(self, B => B::new().is_some())
 	}
 
-	/// The backend's name: "generic", "avx2".
+	/// The backend's name: "generic", "avx2", "simd128".
 	pub fn name(self) -> &'static str {
 		on_backend!(self, B => B::NAME)
 	}
@@ -228,7 +243,7 @@ impl Backend {
 		Self::ALL.iter().copied().find(|b| b.name() == name)
 	}
 
-	/// The engine's name on the backend, for logs: "CPU_REV2 (generic)", "CPU_REV2 (AVX2)".
+	/// The engine's name on the backend, for logs: "CPU_REV2 (generic)", "CPU_REV2 (AVX2)", "CPU_REV2 (simd128)".
 	pub fn engine_name(self) -> &'static str {
 		on_backend!(self, B => B::ENGINE_NAME)
 	}

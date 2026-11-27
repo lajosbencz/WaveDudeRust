@@ -1,7 +1,7 @@
 //! The CPU_REV2 engine: the scheme, the grid and the features of the reference CPU engine (engine/cpu.rs), its passes
 //! fused into blocked steps and its hot loops written as row kernels of a backend (backend/mod.rs): the generic one in
-//! portable Rust, or one for an instruction set (AVX2 and FMA). This module and blocked.rs, the orchestration, build
-//! for every target; only the backends are target-specific.
+//! portable Rust, or one for an instruction set (AVX2 and FMA; simd128 in wasm). This module and blocked.rs, the
+//! orchestration, build for every target; only the backends are target-specific.
 //!
 //! The grid is the CPU engine's: padded by [`PAD`] rings, `stride = grid width + 2 PAD`, the rings 0 unless Mur's
 //! condition sets them in `u` on open edges without a rim, mirror cells at c2 = 0 with the taps across a mirror dropped
@@ -398,7 +398,7 @@ impl<'a, B: RowKernels> NineLine<'a, B> {
 	/// Writes the next field over `next`, the `gw` grid cells of padded row `r` holding the field one sub-step before,
 	/// on the columns `xs`, and advances `stages` (the row's), when given, by the values written. `u` holds the
 	/// padded rows `r - 1` to `r + 1` of the field.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn row(&self, r: usize, u: &[f32], next: &mut [f32], mut stages: Option<Intensity<'_>>) {
 		let Self { s, gw, kernels, uniform, c2, d, cuts, mirrors, xs } = *self;
 		let (at, runs) = (r * s + PAD, uniform.row(r - PAD));
@@ -468,7 +468,7 @@ impl<'a, B: RowKernels> DrpLine<'a, B> {
 
 	/// Hands `f` the pieces of the cells `span` of padded row `r` (all uncut), each with its medium: a uniform run's
 	/// constants, or the planes' values.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn pieces(&self, r: usize, span: Range<usize>, mut f: impl FnMut(Range<usize>, RowMedium<'_>)) {
 		let at = r * self.s + PAD;
 		let (c2, d) = (&self.c2[at..][..self.gw], &self.d[at..][..self.gw]);
@@ -483,7 +483,7 @@ impl<'a, B: RowKernels> DrpLine<'a, B> {
 
 	/// Writes `w = c2 L u` over `w`, the `gw` grid cells of padded row `r`, on the columns `xs`, from the 7 padded rows
 	/// `u` around it.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn lap(&self, r: usize, u: &Rows<'_>, w: &mut [f32]) {
 		let (at, gw, kernels, axis) = (r * self.s + PAD, self.gw, self.kernels, &self.axis);
 		let uncut = |span: Range<usize>, w: &mut [f32]| {
@@ -504,7 +504,7 @@ impl<'a, B: RowKernels> DrpLine<'a, B> {
 	/// Writes the next field over `next`, the `gw` grid cells of padded row `r` holding the field one sub-step before,
 	/// on the columns `xs`, from the row's field `u` (its `gw` grid cells) and the 7 padded rows `w` around it; advances
 	/// `stages` (the row's), when given, by the values written.
-	#[inline(always)]
+	#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 	fn outer(&self, r: usize, u: &[f32], w: &Rows<'_>, next: &mut [f32], mut stages: Option<Intensity<'_>>) {
 		let (at, gw, kernels, axis) = (r * self.s + PAD, self.gw, self.kernels, &self.axis);
 		let uncut = |span: Range<usize>, next: &mut [f32], stages: &mut Option<Intensity<'_>>| {
@@ -579,7 +579,7 @@ fn grid_rows(
 					_ => None,
 				};
 				kernels.run_row(
-					#[inline(always)]
+					#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 					|| {
 						row(r, cells, stages);
 						if let (Some(shared), Some(mut rows), Some(scratch)) = (shared, rim_rows, scratch.as_mut()) {
