@@ -117,16 +117,17 @@ fn restore(saved: Option<&str>) -> Dock {
 /// Sets up the dock in the `saved` arrangement and wires the window's dock callbacks; `save` takes the
 /// arrangement after each change.
 pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) + 'static) {
+	let ui_dock = app.global::<ui::Dock<'_>>();
 	let dock = restore(saved);
 	let saver = Saver::new(&dock, save);
 	let (groups, splitters) = (Rc::new(VecModel::default()), Rc::new(VecModel::default()));
-	app.global::<ui::Dock<'_>>().set_metrics(ui::DockMetrics {
+	ui_dock.set_metrics(ui::DockMetrics {
 		title: METRICS.title_bar,
 		tab: METRICS.tab_strip,
 		splitter: METRICS.splitter,
 	});
-	app.global::<ui::Dock<'_>>().set_groups(ModelRc::from(groups.clone()));
-	app.global::<ui::Dock<'_>>().set_splitters(ModelRc::from(splitters.clone()));
+	ui_dock.set_groups(ModelRc::from(groups.clone()));
+	ui_dock.set_splitters(ModelRc::from(splitters.clone()));
 	let docking = Rc::new(RefCell::new(Docking {
 		dock,
 		area: Rect::new(0., 0., app.get_dock_width(), app.get_dock_height()),
@@ -140,14 +141,14 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	docking.borrow_mut().refresh(app);
 
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_resized(move || {
+	ui_dock.on_resized(move || {
 		h.with(|d, app| {
 			d.area = Rect::new(0., 0., app.get_dock_width(), app.get_dock_height());
 			d.refresh(app);
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_splitter_moved(move |index, x, y| {
+	ui_dock.on_splitter_moved(move |index, x, y| {
 		h.with(|d, app| {
 			let Some(bar) = models::index_from_ui(index).and_then(|i| d.layout.splitters.get(i).copied()) else {
 				return;
@@ -159,12 +160,12 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let dk = docking.clone();
-	app.global::<ui::Dock<'_>>().on_splitter_released(move || {
+	ui_dock.on_splitter_released(move || {
 		let d = &mut *dk.borrow_mut();
 		d.saver.commit(&d.dock);
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_activate(move |pane| {
+	ui_dock.on_activate(move |pane| {
 		h.with(|d, app| {
 			d.dock.activate(&pane);
 			d.focused = d.dock.group_of(&pane);
@@ -172,7 +173,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_move_to(move |pane, side| {
+	ui_dock.on_move_to(move |pane, side| {
 		h.with(|d, app| {
 			if d.dock.move_to(&Subject::Pane(pane.to_string()), Target::Edge(edge(side))) {
 				d.focused = d.dock.group_of(&pane);
@@ -181,7 +182,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let dk = docking.clone();
-	app.global::<ui::Dock<'_>>().on_drag_over(move |pane, group, x, y| {
+	ui_dock.on_drag_over(move |pane, group, x, y| {
 		let d = dk.borrow();
 		let drop = subject(&d.dock, &pane, group).and_then(|s| d.dock.drop_target(&s, Point::new(x, y), d.area));
 		drop.map_or_else(Default::default, |t| {
@@ -190,7 +191,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		})
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_dropped(move |pane, group, x, y| {
+	ui_dock.on_dropped(move |pane, group, x, y| {
 		h.with(|d, app| {
 			let area = d.area;
 			if drop_at(&mut d.dock, &pane, group, Point::new(x, y), area) {
@@ -202,7 +203,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_cancelled(move || {
+	ui_dock.on_cancelled(move || {
 		h.with(|d, app| {
 			if d.stale {
 				d.refresh(app);
@@ -211,7 +212,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 	});
 	// a press anywhere in a group lights it, as Next's focus does; the window's events report it unconsumed
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_pressed(move |x, y| {
+	ui_dock.on_pressed(move |x, y| {
 		h.with(|d, app| {
 			let at = Point::new(x - app.get_dock_x(), y - app.get_dock_y());
 			let hit = d.layout.groups.iter().find(|g| g.rect.contains(at)).map(|g| g.id);
@@ -222,7 +223,7 @@ pub(crate) fn wire(app: &AppWindow, saved: Option<&str>, save: impl Fn(String) +
 		});
 	});
 	let h = Handle::new(&docking, app);
-	app.global::<ui::Dock<'_>>().on_show_pane(move |pane, shown| {
+	ui_dock.on_show_pane(move |pane, shown| {
 		h.with(|d, app| {
 			if shown {
 				d.dock.show(&pane);

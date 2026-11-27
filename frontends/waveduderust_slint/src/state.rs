@@ -135,18 +135,19 @@ impl State {
 
 	/// Opens the memory warning the run asks, with the proposal ticked; closes one no longer asked.
 	pub(crate) fn show_warning(&mut self, app: &AppWindow) {
+		let warning = app.global::<ui::MemoryWarning<'_>>();
 		match (self.live.warning(), self.warning_ticks) {
 			(Some((_, w)), None) => {
 				let ticks = w.proposal();
 				self.warning_ticks = Some(ticks);
-				app.global::<ui::MemoryWarning<'_>>().set_data(memory::data(&w, ticks));
-				app.global::<ui::MemoryWarning<'_>>().set_shown(true);
+				warning.set_data(memory::data(&w, ticks));
+				warning.set_shown(true);
 			}
 			// the request may have changed under it
-			(Some((_, w)), Some(ticks)) => app.global::<ui::MemoryWarning<'_>>().set_data(memory::data(&w, ticks)),
+			(Some((_, w)), Some(ticks)) => warning.set_data(memory::data(&w, ticks)),
 			(None, Some(_)) => {
 				self.warning_ticks = None;
-				app.global::<ui::MemoryWarning<'_>>().set_shown(false);
+				warning.set_shown(false);
 			}
 			(None, None) => {}
 		}
