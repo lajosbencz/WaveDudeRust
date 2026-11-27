@@ -69,6 +69,16 @@ impl Handle {
 	}
 }
 
+/// [`on_row`] for a callback with no argument besides the row.
+fn on_node(
+	state: &Rc<RefCell<State>>,
+	app: &AppWindow,
+	f: impl Fn(&mut State, Node) + 'static,
+) -> impl Fn(i32) + 'static {
+	let f = on_row(state, app, move |s, node, ()| f(s, node));
+	move |row| f(row, ())
+}
+
 /// A tree row's handler: `f` on the row's node with the callback's argument and the
 /// window refreshed after.
 fn on_row<A: 'static>(

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use slint::ComponentHandle;
 
-use super::{Handle, dragged, on_row};
+use super::{Handle, dragged, on_node, on_row};
 use crate::selection::Pick;
 use crate::state::State;
 use crate::tree::{self, Node};
@@ -16,16 +16,14 @@ use crate::{canvas, clipboard, remove};
 pub(crate) fn wire_tree(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	app.on_tree_select(on_row(state, app, |s, node, pick| s.selection.pick(&s.doc.project, node, pick)));
 	// a row's own check box and buttons act on the group it belongs to, else on the row
-	let toggle = on_row(state, app, |s, node, ()| {
+	app.on_tree_toggle(on_node(state, app, |s, node| {
 		let group = s.selection.group_of(node);
 		s.doc.edit(|p| group.iter().for_each(|&n| tree::toggle(p, n)));
-	});
-	app.on_tree_toggle(move |row| toggle(row, ()));
-	let expand = on_row(state, app, |s, node, ()| {
+	}));
+	app.on_tree_expand(on_node(state, app, |s, node| {
 		let open = s.collapsed.contains(&node);
 		s.expand(node, open);
-	});
-	app.on_tree_expand(move |row| expand(row, ()));
+	}));
 	let st = state.clone();
 	app.on_tree_drag_data(move |row| {
 		let mut data = slint::DataTransfer::default();
@@ -42,19 +40,12 @@ pub(crate) fn wire_tree(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	});
 	let st = state.clone();
 	app.on_tree_drop_place(move |row, data, before| {
-		let s = st.borrow();
-		let place = dragged(&data).zip(s.node(row)).and_then(|(n, t)| tree::drop_target(&s.doc.project, n, t, before));
-		place.map_or(ui::DropPlace::None, |(place, _)| place)
+		drop_of(&st.borrow(), row, &data, before).map_or(ui::DropPlace::None, |(_, (place, _))| place)
 	});
 	let h = Handle::new(state, app);
 	app.on_tree_drop(move |row, data, before| {
 		h.with(|s, app| {
-			let target = dragged(&data).zip(s.node(row));
-			let Some((node, (_, to))) =
-				target.and_then(|(n, t)| Some((n, tree::drop_target(&s.doc.project, n, t, before)?)))
-			else {
-				return;
-			};
+			let Some((node, (_, to))) = drop_of(s, row, &data, before) else { return };
 			let mut moved = node;
 			s.doc.edit(|p| moved = tree::move_to(p, node, to));
 			s.selection.set(moved);
@@ -99,6 +90,11 @@ pub(crate) fn wire_tree(state: &Rc<RefCell<State>>, app: &AppWindow) {
 		s.doc.edit(|p| to = tree::shift(p, node, by as isize));
 		s.selection.set(to);
 	}));
-	let remove_row = on_row(state, app, |s, node, ()| remove(s, &s.selection.group_of(node)));
-	app.on_tree_remove(move |row| remove_row(row, ()));
+	app.on_tree_remove(on_node(state, app, |s, node| remove(s, &s.selection.group_of(node))));
+}
+
+/// The dragged node and where it lands on `row`.
+fn drop_of(s: &State, row: i32, data: &slint::DataTransfer, before: bool) -> Option<(Node, (ui::DropPlace, usize))> {
+	let (node, target) = dragged(data).zip(s.node(row))?;
+	Some((node, tree::drop_target(&s.doc.project, node, target, before)?))
 }
