@@ -19,9 +19,11 @@
 //!
 //! Damage: one rectangle of grid cells (damage.rs) outside which the field and the intensity stages are +0. A pass
 //! runs on the damage grown by its reach (the stencil's, the CPML's with a rim), its rows only and its columns within
-//! them, and so does the CPML on the rim (pml.rs, `CpuPml::apply`); a skipped cell would compute to +0, so the result is the same bit for bit. The damage then takes in the cells
-//! a source drives and the cells the pass made non-zero (any bit set), found in the band it grew by. It is empty at
-//! rest and shrinks only on a reset, so every cell ever written is recomputed while the run lasts.
+//! them, and so does the CPML on the rim (pml.rs, `CpuPml::apply`); a skipped cell would compute to +0, so the result
+//! is the same bit for bit. The damage then takes in the cells a source drives and the cells the pass made non-zero
+//! (any bit set), found in the band it grew by. It is empty at rest and shrinks only on a reset, so every cell ever
+//! written is recomputed while the run lasts. Any code that writes the field or the stages outside the passes and the
+//! forcing must widen the damage; debug builds check the invariant after each sub-step.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -29,7 +31,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use super::capture;
-use super::damage::{Damage, extent};
+use super::damage::{Damage, extent, zero_outside};
 use super::forcing::{IMAGE_LEVELS, SourceGroups, live};
 use super::mur::{MurChain, mur_chains};
 use super::pml::{self, CpuPml, Medium, cut, taps};
@@ -409,6 +411,16 @@ impl CpuEngine {
 		self.damage = extent(&self.prev, self.stride, &area, self.damage.clone());
 		self.apply_open_edges();
 		std::mem::swap(&mut self.u, &mut self.prev);
+		debug_assert!(self.damage_holds(), "a cell outside the damage {:?} is not +0", self.damage);
+	}
+
+	/// Whether every grid cell outside the damage is +0 in the field, `w` and the intensity stages.
+	fn damage_holds(&self) -> bool {
+		let (gw, gh) = (self.shared.scene.grid_width() as usize, self.shared.scene.grid_height() as usize);
+		[&self.u, &self.prev, &self.w, &self.s1, &self.s2]
+			.into_iter()
+			.filter(|b| !b.is_empty())
+			.all(|b| zero_outside(b, self.stride, gw, gh, &self.damage))
 	}
 
 	/// Mur's condition on the first ring (mur.rs, `mur_weights`); the second and third rings, which only the DRP stencil

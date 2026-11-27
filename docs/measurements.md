@@ -257,7 +257,7 @@ Growing the damage by the passes' reach alone (16 cells a step for the 4th order
 
 At 90 % damage and above the restriction costs at most 1 %. A harness outside the repository links master's library
 (its version renamed) and the branch's into one binary and steps both on the same scene in alternating blocks of 25
-steps, which falls the host's noise on both alike; separate processes on this guest differed by more than 1 % between
+steps, so the host's noise falls on both alike; separate processes on this guest differed by more than 1 % between
 runs of the same binary. The scenes: a source at the centre, the open grid (the damage the whole grid) or a mirror
 box on the canvas's border (the damage 92 % of the grid), timed after the wave fills them; the fields of the two
 engines stay equal bit for bit. Branch over master, total time, two runs:

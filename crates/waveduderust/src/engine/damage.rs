@@ -74,6 +74,19 @@ pub fn extent(buf: &[f32], s: usize, area: &Damage, known: Damage) -> Damage {
 	out
 }
 
+/// Whether every grid cell of the padded `buf` (row length `s`, `gw` x `gh` grid cells) outside `area` is +0.
+pub fn zero_outside(buf: &[f32], s: usize, gw: usize, gh: usize, area: &Damage) -> bool {
+	(0..gh).all(|gy| {
+		let row = &buf[(gy + PAD) * s + PAD..][..gw];
+		let zero = |xs: Range<usize>| row[xs].iter().all(|v| v.to_bits() == 0);
+		if area.is_empty() || !area.y.contains(&gy) {
+			zero(0..gw)
+		} else {
+			zero(0..area.x.start) && zero(area.x.end..gw)
+		}
+	})
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -88,5 +101,17 @@ mod tests {
 		assert_eq!(d, Damage { x: 5..10, y: 0..6 });
 		d.include((PAD + 7) * 16 + PAD, 16);
 		assert_eq!(d, Damage { x: 0..10, y: 0..8 });
+	}
+
+	#[test]
+	fn zero_outside_reads_only_outside_the_area() {
+		let s = 4 + 2 * PAD;
+		let mut buf = vec![0.0f32; (3 + 2 * PAD) * s];
+		buf[(PAD + 1) * s + PAD + 2] = 1.0;
+		let area = Damage { x: 2..3, y: 1..2 };
+		assert!(zero_outside(&buf, s, 4, 3, &area));
+		assert!(!zero_outside(&buf, s, 4, 3, &Damage::NONE));
+		buf[(PAD + 1) * s + PAD + 3] = -0.0;
+		assert!(!zero_outside(&buf, s, 4, 3, &area), "-0 is not +0");
 	}
 }
