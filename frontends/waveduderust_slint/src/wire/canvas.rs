@@ -86,7 +86,7 @@ pub(crate) fn wire_canvas(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	let h = Handle::new(state, app);
 	canvas.on_export_probe_csv(move |probe| {
 		h.with(|s, app| {
-			if let Ok(i) = usize::try_from(probe) {
+			if let Some(i) = models::index_from_ui(probe) {
 				s.selection.set(Node::Probe(i));
 				export_probe_csv(s, app, i);
 				s.show(app);

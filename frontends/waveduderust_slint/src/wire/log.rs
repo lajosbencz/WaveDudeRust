@@ -6,6 +6,7 @@ use std::rc::Rc;
 use super::Handle;
 use crate::clipboard;
 use crate::messages::Messages;
+use crate::models;
 use crate::state::State;
 use crate::ui::AppWindow;
 
@@ -34,7 +35,7 @@ pub(crate) fn wire_log(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	});
 	let h = Handle::new(state, app);
 	app.on_log_select(move |row, control, shift| {
-		let Ok(row) = usize::try_from(row) else { return };
+		let Some(row) = models::index_from_ui(row) else { return };
 		h.with(|s, app| {
 			s.messages.select(row, control, shift);
 			s.messages.show(app);

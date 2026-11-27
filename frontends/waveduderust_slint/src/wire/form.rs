@@ -220,7 +220,7 @@ pub(crate) fn wire_form(state: &Rc<RefCell<State>>, app: &AppWindow) {
 	let h = Handle::new(state, app);
 	form_ui.on_base_on(move |picked| {
 		h.show(|s, app| {
-			if let (Node::Scheme(i), Ok(k)) = (s.selection.current(), usize::try_from(picked)) {
+			if let (Node::Scheme(i), Some(k)) = (s.selection.current(), models::index_from_ui(picked)) {
 				let base = form::bases(&s.doc.project, &s.schemes, i).get(k).map(|&b| b.clone());
 				if let Some(base) = base {
 					s.doc.edit(|p| {
