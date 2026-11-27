@@ -164,12 +164,12 @@ fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> 
 }
 
 /// The CPU engine: the CPU_REV2 engine ([`rev2::CpuRev2Engine`]) on the best backend this CPU runs when that is
-/// faster than the portable code (natively, on x86-64 with AVX2 and FMA), else the legacy one ([`cpu::CpuEngine`]),
+/// faster than the portable code (natively on x86-64 with AVX2 and FMA, and in wasm built with simd128), else the
+/// legacy one ([`cpu::CpuEngine`]),
 /// whose results the CPU_REV2 engine's generic backend repeats bit for bit and its faster backends within rounding.
 /// The environment variable `WAVEDUDE_CPU_ENGINE` overrides it natively ([`rev2_choice`]), and the legacy engine
-/// switched on ([`set_legacy_cpu_engine`]) overrides both. The web builds the legacy engine: the CPU_REV2 engine's
-/// simd128 backend (wasm built with simd128) is not chosen here yet (docs/measurements.md, The CPU_REV2 engine in
-/// wasm).
+/// switched on ([`set_legacy_cpu_engine`]) overrides both. The web's simd128 run worker builds the CPU_REV2 engine
+/// on its simd128 backend, its plain one the legacy engine (docs/measurements.md, The CPU_REV2 engine in wasm).
 fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
 	if let Some(backend) = rev2_backend() {
 		return Box::new(rev2::CpuRev2Engine::with_backend(scene, options, backend));
@@ -187,7 +187,7 @@ pub fn set_legacy_cpu_engine(on: bool) {
 }
 
 /// Whether the CPU engine is the CPU_REV2 engine unless the legacy one is switched on ([`set_legacy_cpu_engine`]):
-/// by default natively on x86-64 with AVX2 and FMA, or as `WAVEDUDE_CPU_ENGINE` asks; never on the web.
+/// by default natively on x86-64 with AVX2 and FMA, or as `WAVEDUDE_CPU_ENGINE` asks, and in wasm built with simd128.
 pub fn rev2_runs() -> bool {
 	unswitched().is_some()
 }
@@ -198,15 +198,23 @@ fn rev2_backend() -> Option<rev2::Backend> {
 }
 
 /// The CPU_REV2 engine's backend without the switch, None for the legacy engine: natively as `WAVEDUDE_CPU_ENGINE`
-/// asks ([`rev2_choice`]), read once.
+/// asks ([`rev2_choice`]), read once; in wasm built with simd128 the simd128 backend (bit for bit the legacy engine,
+/// and faster with fused steps: docs/measurements.md), else the legacy engine (the generic backend's 4th order does
+/// not vectorise in wasm).
 fn unswitched() -> Option<rev2::Backend> {
 	#[cfg(not(target_arch = "wasm32"))]
 	{
 		static CHOICE: std::sync::OnceLock<Option<rev2::Backend>> = std::sync::OnceLock::new();
 		*CHOICE.get_or_init(|| rev2_choice(std::env::var("WAVEDUDE_CPU_ENGINE").ok().as_deref()))
 	}
-	#[cfg(target_arch = "wasm32")]
-	None
+	#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+	{
+		Some(rev2::Backend::Simd128)
+	}
+	#[cfg(all(target_arch = "wasm32", not(target_feature = "simd128")))]
+	{
+		None
+	}
 }
 
 /// The CPU_REV2 engine's backend for `WAVEDUDE_CPU_ENGINE=value`, None for the legacy engine: unset, the best backend
