@@ -87,14 +87,44 @@ Rust, CPU engine: the passes skip the cells that stay 0. One rectangle of grid c
 of the field and the intensity stages that is not +0. It is empty at rest and after a reset, and the whole grid
 after a field is set. A pass runs on the damage grown on every side by the cells the pass reaches: the stencil's
 reach (1 for the 9-point stencil, 3 for the 4th order), and 4 with a rim, the CPML's reach (`engine::pml::REACH`).
-It runs only the rows inside, and only its columns within those rows. The CPML after it does the same on the rim:
-the top and bottom strips on the area's rows and columns, and the left and right strips on its rows, only where the
-area meets them. Afterwards the damage takes in the cells a source drove and the cells the pass left not +0 (any bit
-set, no threshold), found by reading only the band it grew by. So it follows the excited medium, about the wave's
-speed, rather than the stencil's reach of up to 16 cells a step. It never shrinks before a reset, so every cell once
-written is recomputed. The skipped cells would compute to +0, so the result is the same bit for bit; a unit test
-compares it with the whole grid for both stencils on open, reflective and CPML edges with a mirror. Debug builds
-check after every sub-step that each cell outside the damage is +0.
+It runs only the rows inside, and only its columns within those rows. The CPML's correction of the pass does the
+same on the rim: the top and bottom strips on the area's rows and columns, and the left and right strips on its
+rows, only where the area meets them. It advances the y strips' memory before the pass and corrects each row of the
+rim as the pass writes it, the same result as a pass over the rim after the pass over the grid. Afterwards the damage
+takes in the cells a source drove and the cells the pass left not +0 (any bit set, no threshold), found by reading
+only the band it grew by. So it follows the excited medium, about the wave's speed, rather than the stencil's reach
+of up to 16 cells a step. It never shrinks before a reset, so every cell once written is recomputed. The skipped
+cells would compute to +0, so the result is the same bit for bit; a unit test compares it with the whole grid for
+both stencils on open, reflective and CPML edges with a mirror. Debug builds check after every sub-step and every
+wavefront (below) that each cell outside the damage is +0.
+
+Rust, CPU engine: `c2` and `d` are constant over most of a scene. Each grid row keeps its runs of at least 16 cells
+where both hold one value, bit for bit, found when the scene is loaded; there every pass's row kernels take the run's
+values as constants instead of reading the two planes. The values are the same, so the result is the same bit for bit
+([docs/measurements.md](../measurements.md#the-cpu-engines-uniform-medium-runs)).
+
+Rust, CPU engine: a step's sub-steps run as one wavefront over the rows (`engine/cpu`, Blocked steps): a row reaches
+the next sub-step as soon as the rows it reads have reached the one before, so a row is still in cache when the next
+sub-step reads it and the planes are swept from memory once a step. The rows split into one band per thread, each
+running first the trapezoid of units that need nothing from its neighbours, then the inverted trapezoids around the
+seams, so no work is done twice and no thread waits for another. The 4th order keeps `w` in a ring of rows per band
+and writes to the plane only the rows the seams read. A wavefront takes several whole steps too, as many as keep its
+trapezoids within 32 rows a side, 8 at most: with 2 sub-steps a step 8 for the 9-point, 4 with a CPML rim, 2 for the
+4th order ([docs/measurements.md](../measurements.md#the-cpu-engines-fused-steps); `WaveEngine::advance_steps`, the run
+worker and `Simulation::run` hand it the steps between captures, probe drains and goal checks). Every value is the same
+expression on the same inputs as one sub-step at a time through the passes, only the order of the rows changes, so the
+result is the same bit for bit; a step of one sub-step runs the passes. A wavefront runs on the damage grown by all its
+sub-steps' reach up front, with every cell a source drives in it, and the damage then takes in what it left not +0.
+
+Rust, CPU engine: the hot loops are row kernels of a backend, chosen when the engine is built: `avx2` on x86-64 with
+AVX2 and FMA, hand-written assembly with fused multiply-adds; `simd128` in wasm built with simd128 (the web's pkg-simd
+run worker); else `generic`, portable Rust, which the compiler vectorises and which on x86-64 runs compiled for AVX2
+and FMA where the CPU has them (`engine/isa.rs`). Rust contracts no `a * b + c` into a fused multiply-add, so the
+generic backend's results are the same on every target bit for bit, and the simd128 backend's are the generic one's.
+The avx2 backend's are within rounding of them, 1e-4 of the peak, not bit for bit
+([docs/measurements.md](../measurements.md#the-cpu-engine-against-masters)). Natively
+`WAVEDUDE_CPU_BACKEND=<name>` (`generic`, `avx2`) asks for a backend; one this build or this CPU lacks is logged and
+the best runs instead. The engine's label names its backend, e.g. "CPU (avx2), 8 threads".
 
 ## Sources
 

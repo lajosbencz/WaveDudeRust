@@ -309,6 +309,119 @@ expression in the same order. The cells with a cut keep their per-cell loops. Th
 the fields equal bit for bit; at 300x200 rim 16 and 640x360 rim 32 too. The probe series of Example01, 03, 08, 13 and
 21 and of `01-single-fiber`, 300 steps, are byte for byte master's.
 
+## The CPU engine's fused 4th-order passes
+
+2026-11-26, the workstation above (Ryzen 7 4700U, 8 cores, VirtualBox guest). The 4th order's outer pass computes
+`w` in a ring of 7 rows per block instead of reading the plane the inner pass wrote (engine/cpu.rs, Fused passes):
+per cell and sub-step the plane's write and read go, and `c2` comes from memory once, not twice. The A/B harness of
+[The CPU engine's damage rectangle](#the-cpu-engines-damage-rectangle), the commit before (`7cb616f`) against the
+fused one, one emitter in the middle, intensity tracked, after the wave filled the grid (600 steps at 800x600, 1400
+at 1920x1080), alternating blocks of 40 steps (8 threads) or 20 (1 thread, `taskset -c 3`); fused over before, total
+time, three runs each:
+
+| Threads | Grid, rim | Open edges | Mirror box |
+|---|---|---|---|
+| 8 | 800x600, 16 | 0.837, 0.841, 0.851 | 0.864, 0.873, 0.957 |
+| 8 | 1920x1080, 32 | 0.756, 0.811, 0.848 | 0.696, 0.721, 0.858 |
+| 1 | 800x600, 16 | 0.973, 0.985, 0.989 | 0.873, 0.916, 0.955 |
+| 1 | 1920x1080, 32 | 0.950, 0.969, 0.985 | 0.903, 0.928, 0.960 |
+
+The 9-point stencil, whose code did not change, read 0.93 to 1.03 alongside (8 threads at 1920x1080, 1 thread at
+800x600), the noise of a run. With 8 threads the step is bound by memory bandwidth and saves most; one thread is
+bound by arithmetic, which the fusion does not reduce (each block computes the 6 rows of `w` around it again, at
+least 16 rows a block). The first 200 steps at 1920x1080, 8 threads, while the damage is small: 0.983. The fields
+are equal bit for bit in every run, and at 300x200 and 640x360, rims 0, 16 and 32, both edges; the probe series of
+Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's. The fused
+loops vectorise, natively (SSE2) and in wasm with simd128, read as in
+[The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm): `drp_span` has a vector body
+in the inner pass, the ring's rows and the outer pass, and so has each pass's per-cell update.
+
+## The CPU engine's uniform-medium runs
+
+2026-11-26, the workstation above. Each grid row keeps its runs of at least 16 cells where `c2` and `d` hold one
+value, and the stencil loops of both stencils take that value as a constant there, so per cell and sub-step neither
+plane is read (8 of about 20 bytes). The A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes), against the commit before
+(`d9ef906`), same scenes plus a graded one where `c2` falls by up to 30% across every row, so that no row has a run
+(the worst case: only the overhead). 8 threads at 1920x1080 rim 32, 1 thread (`taskset -c 3`) at 800x600 rim 16;
+runs over before, total time, three runs each:
+
+| Threads | Stencil | Open edges | Mirror box | Graded |
+|---|---|---|---|---|
+| 8 | 4th order | 0.860, 0.867, 0.943 | 0.927, 0.942, 0.978 | 0.938, 0.976, 1.026 |
+| 8 | 9-point | 0.706, 0.793, 0.811 | 0.788, 0.912, 0.924 | 0.986, 1.001, 1.011 |
+| 1 | 4th order | 0.889, 0.921, 0.924 | 0.987, 1.011, 1.022 | 1.006, 1.035, 1.066 |
+| 1 | 9-point | 0.879, 0.888, 0.897 | 0.993, 0.995, 1.027 | 0.970, 1.012, 1.022 |
+
+Five more runs of the 4th order, graded, 1 thread: 0.990 to 1.050, about 2% slower on average; a direct path for
+rows without runs did not change that (1.017 to 1.049), so it stayed out. 8 threads, 4th order, open, 800x600 rim 16:
+0.955, 0.956, 1.061. The 9-point gains most, as its step moves fewer bytes besides `c2` and `d`. The fields are equal
+bit for bit in every run, and at 300x200 and 640x360, rims 0, 16 and 32, all three scenes, both stencils; the probe
+series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's.
+Both paths of each loop vectorise, natively (SSE2) and in wasm with simd128, read as in
+[The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm).
+
+## The CPU engine's CPML in the row passes
+
+2026-11-26, the workstation above. Timers around each stage of the step (added for the measurement, not kept), 4th
+order, 1920x1080 rim 32, wave filled: the CPML took 32% of the step on 8 threads and 22% on 1, for about 9% of the
+cells; its two applications ran 4.8 ms a step on 1 thread and 2.9 ms on 8, 1.6 times faster (the grid's pass 2.9
+times), psi of y not faster at all. Each application was four passes over the rim, the x strips' two over every row
+for `2 rim` cells each; the 8 threads ran at about 490 to 505% CPU. `perf` was not open to the guest
+(`perf_event_paranoid` 4).
+
+The y strips' two stages read only the field, so they run before the pass; psi of x and the correction need nothing
+beyond their row, so the pass runs them on each row right after writing it (and after the row's intensity), the
+same operations in the same order as a pass over the rim after the grid's. The A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes) against the commit before
+(`dd633a8`), fused over before, total time:
+
+| Threads | Grid, rim | Stencil | Open edges | Mirror box |
+|---|---|---|---|---|
+| 8 | 1920x1080, 32 | 4th order | 0.856, 0.893, 0.909 | 0.890, 0.959, 0.960 |
+| 8 | 1920x1080, 64 | 4th order | 0.825 to 0.919 (5 runs) | 0.881 to 0.949 (5 runs) |
+| 8 | 1920x1080, 32 | 9-point | 0.900, 0.926, 0.930 | 0.906, 0.914, 0.944 |
+| 8 | 1920x1080, 64 | 9-point | 0.844 to 0.893 (5 runs) | 0.792 to 0.938 (5 runs) |
+| 1 | 800x600, 32 | 4th order | 0.888 to 0.968 (6 runs) | 0.982 to 1.001 |
+| 1 | 800x600, 32 | 9-point | 0.996 to 1.070 (6 runs) | 1.014 to 1.024 |
+
+The 9-point on 1 thread is 2 to 4% slower, and so it is without a rim (1.016 to 1.109, medians 1.00 to 1.04), where
+it runs none of the changed code: its row loop is the same as before. Three ways of driving the rows (blocks of one
+row, blocks of up to 16, a plain loop per row) and the rim as a separate sweep on one thread changed nothing, so the
+cause looks like code placement, which `perf` would show. The fields are equal bit for bit in every run, at 8 and 1
+threads, at 300x200, 640x360 and 120x90, rims 0, 16, 32 and 40, open, mirror box and graded, both stencils; the probe
+series of Example01, 03, 08, 13 and 21 and of `01-single-fiber`, 300 steps, are byte for byte the commit before's.
+Every CPML loop keeps its vector body, natively (SSE2) and in wasm with simd128.
+
+## The CPU engine's AVX2 dispatch
+
+2026-11-26, the workstation above (a KVM guest of 8 vCPUs on a Ryzen 7 4700U, which has AVX2 and FMA). The release
+build targets x86-64, so its loops ran SSE2, 4 lanes. Built whole with `-C target-cpu=x86-64-v3`, the 4th order took
+about 0.84 of the time on 1 thread, with the same probe series bit for bit (Rust fuses no multiply-add on its own).
+Each row's work now runs through `isa::wide`, compiled for AVX2 and FMA when the CPU has them: the A/B harness of
+[The CPU engine's fused 4th-order passes](#the-cpu-engines-fused-4th-order-passes) against the commit before
+(`7f71f98`), open edges, total time:
+
+| Threads | Grid, rim | 4th order | 9-point |
+|---|---|---|---|
+| 1 | 800x600, 32 | 0.862, 0.865, 0.884 | 0.878, 0.894, 0.918 |
+| 8 | 1920x1080, 64 | 0.875, 0.885, 0.949 | 0.983, 1.045, 1.058 |
+
+Wrapping only the innermost loops reached 0.89 to 0.93 on the 4th order: a closure keeps the instruction set of the
+function it is written in, and the passes' callbacks were left out of line in the baseline's. The 9-point on 8
+threads gains nothing measurable on this host, which preempts the guest's threads. Timers around the
+stages (not kept) put the passes within 1 to 8% of the whole x86-64-v3 build's. The fields are equal bit for bit in
+every run, at 8 and 1 threads, at 300x200, 640x360 and 120x90, rims 0, 16, 32 and 40, open, mirror box and graded,
+both stencils; the 256-bit loop bodies of the 9-point and 4th-order stencils, the ring of `w`, the intensity and the
+CPML were checked in the disassembly.
+
+In wasm `isa::wide` is a plain call. The CPU engine alone in Node 22, 4th order, 800x600 rim 32, 1 thread, mean of 6
+medians, the commit before against this one, same field: 7.87 ms a step against 8.13 with simd128 (3% longer), 20.9
+against 22.2 without (6%); a second series of 4 took 2 and 1.5% longer; the 9-point the same as before. Forcing the
+closures inline there too grew the wasm by 12 to 25% and took 3 to 7% longer, so it is forced on x86-64 only, and
+the wasm is the size it was. Building either file at the commit before, the other at this one, took 0 to 2.5% longer
+as well, so what is left is not in one place; the same build varies by about 3% between runs here.
+
 ## The CPU engine in wasm, with and without simd128
 
 2026-11-25, the workstation above. A harness outside the repository runs the CPU engine alone, built for wasm32 at
@@ -331,6 +444,355 @@ Example01 (4th order, a mirror): simd128 alone gains nothing; with the mirror ro
 second. Example09 (9-point, no mirror): simd128 doubles the steps at e4475b7 and at 10a6a02; at 7fceb92 it gains
 nothing. The author's Example09 figures were taken in the browser's
 whole app and are not split by simd128.
+
+## The CPU engine's wavefront in wasm
+
+The CPU engine of this section and the next two is today's, its sub-steps and steps fused into wavefronts over the rows
+(engine/cpu); the previous CPU engine is the one it replaced, which fused only the 4th order's two passes.
+
+2026-11-27, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs), Node 22.22.1 (V8 12.4). A harness outside
+the repository (a `cdylib` on `waveduderust` with `unstable-engine`, `lto = "thin"`, `codegen-units = 1`) builds the
+previous CPU engine and the CPU engine on its generic and its simd128 backend in one wasm module, with
+`-C target-feature=+simd128`, `wasm-bindgen --target nodejs`, `wasm-opt -O3 --all-features`. A blank scene, one
+Gaussian source in the middle, intensity on; 800x600, rim 0 or a CPML rim of 32; 300 steps to warm up, then 5 runs of
+30 steps timed, `taskset -c 5`, ms a step, the median of 3 processes per engine, alternating. wasm has no threads
+here: rayon runs its pool's work on the calling thread (`rayon::current_num_threads()` is 1), so both engines run on
+one thread.
+
+| Stencil, rim | Previous CPU engine | CPU, generic | CPU, simd128 | simd128, forced inlining |
+|---|---|---|---|---|
+| 9-point, rim 0 | 1.544 | 1.612 (1.04) | 1.637 (1.06) | 1.594 (1.03) |
+| 9-point, rim 32 | 3.717 | 3.404 (0.92) | 3.312 (0.89) | 3.309 (0.89) |
+| 4th order, rim 0 | 3.475 | 15.514 (4.46) | 3.516 (1.01) | 3.465 (1.00) |
+| 4th order, rim 32 | 7.810 | 21.377 (2.74) | 6.627 (0.85) | 6.572 (0.84) |
+
+In brackets: against the previous engine. The scene takes 2 sub-steps, so the CPU engine runs its blocked steps. The
+run worker the web build ships with simd128 is 24 bytes larger (3613727 bytes before `wasm-bindgen`): it built the
+previous engine then, and the CPU engine was unreachable there.
+
+The simd128 backend (engine/cpu/backend/simd128.rs) computes the generic backend's values, so the previous CPU engine's,
+bit for bit: its lane kernels keep the generic expressions in their order, and simd128 has no fused multiply-add. The
+harness steps two engines side by side and compares the padded field and both intensity stages: simd128 against generic,
+generic against the previous engine, and simd128 against it, 300x200, 400 steps, both stencils, rim 0, a CPML rim of 32
+and an inside damping band of 6 (a medium per cell, the planes' kernels): all bit for bit equal. Native tests run the
+same lane kernels on a portable 4-lane type against the generic backend bit for bit (lanes.rs); the simd128 backend's
+own unit test runs only in wasm, and tests/cpu.rs (an 8-thread pool) would need adapting for single-threaded wasm, so
+until web tests run this harness is its check.
+
+The generic backend's 4th order was slow in wasm: its outer update stayed scalar there, where the previous engine's DRP
+span vectorises ([The CPU engine's loops vectorised in wasm](#the-cpu-engines-loops-vectorised-in-wasm)); it now
+vectorises ([The CPU engine's generic backend vectorised](#the-cpu-engines-generic-backend-vectorised)).
+
+Inlining: the orchestration's closures and row functions are `#[inline(always)]` natively, so the code a backend's
+`#[target_feature]` entry runs takes its instruction set. In wasm the module's instruction set is everywhere, and
+forcing them grew the harness's wasm from 669877 to 685381 bytes (2.3 %) for 0 to 3 % (the last column; in an earlier
+run of the same comparison with the pairs below, -1 to +2 %), within the runs' spread, so they are inlined by force
+only where a row entry has a run-time copy for a wider instruction set (`#[cfg_attr(cpu_wide, inline(always))]`,
+`cpu_wide` set by build.rs on x86-64), as engine/isa.rs found for the previous CPU engine.
+
+8 cells per iteration, as two `v128`s side by side (each operation on both 4-cell groups in a row, what V8's
+experimental revectorization to 256-bit instructions fuses, `--experimental-wasm-revectorize`, off by default), gained
+nothing on the 9-point kernel (1.60 against 1.59 ms at rim 0) and lost on the DRP kernels (3.77 against 3.39 ms at rim
+0, 6.69 against 6.34 at rim 32), likely as a pair with the DRP kernels' constants needs more than x86-64's 16 xmm
+registers. With the pairs the DRP kernels also gave a field that differed from the other engines' in a few cells from
+some step on (by about 1e-4 of the cell's value at first) in 7 to 47 % of fresh engines stepped 450 times in one process
+(the most with `--liftoff-only`, also with `--no-liftoff` and `--no-wasm-stack-checks`), on different iterations from
+run to run, while wasm's semantics are deterministic and the generic and previous engines and the 9-point kernel never
+diverged; with one `v128` per iteration none of 120 diverged (Liftoff only and TurboFan only, rim 0 and 32, 30 each).
+Not explained: V8 12.4's code under that register pressure, or this guest's handling of the xmm state (microcode
+0x860010d); natively the AVX2 and generic backends gave one hash in 30 runs each. The comparison should be repeated on
+another machine and in a browser's V8.
+
+## The CPU engine's fused steps
+
+2026-11-27, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs; its memory bus saturates at about 18 GB/s
+from 3 to 4 threads). A harness outside the repository (`waveduderust` with `unstable-engine` and `unstable-scene`,
+`lto = "thin"`, `codegen-units = 1`) steps the CPU engine on its AVX2 backend from a full-damage start (a smooth
+field over every cell, so every step covers the whole grid) on a blank scene with one source in the middle, intensity
+on, 2 sub-steps a step: 24 steps to warm up, then `advance_steps(24)` 4 to 36 times (12 to 36 on 8 threads), at most
+`K` steps a sweep (`set_fused_steps`), so 24 steps go as whole sweeps of `K`. Steps a second, two passes; 1 thread is
+`taskset -c 3`.
+
+The 9-point stencil:
+
+| Threads | Grid, rim | K = 1 | 2 | 3 | 4 | 6 | 8 |
+|---|---|---|---|---|---|---|---|
+| 1 | 1920x1080, 0 | 247, 245 | 360, 332 | 376, 381 | 420, 407 | 454, 453 | 444, 468 |
+| 1 | 1920x1080, 32 | 152, 154 | 214, 204 | 236, 222 | 248, 251 | 266, 260 | 256, 260 |
+| 1 | 800x600, 0 | 917, 888 | 1314, 1234 | 1578, 1496 | 1593, 1385 | 1768, 1602 | 1905, 1664 |
+| 1 | 800x600, 32 | 448, 421 | 584, 595 | 664, 621 | 706, 660 | 740, 685 | 714, 703 |
+| 8 | 1920x1080, 0 | 356, 378 | 611, 734 | 934, 952 | 1296, 1217 | 1198, 1235 | 1266, 1228 |
+| 8 | 1920x1080, 32 | 283, 272 | 453, 447 | 550, 487 | 540, 539 | 501, 489 | 432, 407 |
+| 8 | 800x600, 0 | 2545, 2216 | 3276, 3856 | 2734, 4722 | 4558, 4644 | 3472, 4741 | 3986, 5967 |
+| 8 | 800x600, 32 | 890, 1000 | 1435, 1366 | 1452, 1544 | 1509, 1638 | 1322, 1194 | 1266, 1105 |
+
+The 4th order (DRP):
+
+| Threads | Grid, rim | K = 1 | 2 | 3 | 4 | 6 | 8 |
+|---|---|---|---|---|---|---|---|
+| 1 | 1920x1080, 0 | 155, 152 | 170, 172 | 165, 168 | 171, 168 | 149, 159 | 142, 142 |
+| 1 | 1920x1080, 32 | 95, 97 | 105, 106 | 105, 107 | 105, 103 | 89, 91 | 68, 72 |
+| 1 | 800x600, 0 | 569, 556 | 645, 632 | 692, 697 | 677, 705 | 667, 677 | 652, 688 |
+| 1 | 800x600, 32 | 280, 270 | 318, 318 | 326, 321 | 318, 323 | 294, 320 | 306, 302 |
+| 8 | 1920x1080, 0 | 279, 293 | 347, 391 | 306, 348 | 292, 296 | 240, 249 | 193, 202 |
+| 8 | 1920x1080, 32 | 185, 201 | 189, 207 | 185, 181 | 171, 168 | 133, 128 | 112, 116 |
+| 8 | 800x600, 0 | 1119, 1053 | 1544, 1364 | 1517, 1519 | 1612, 1690 | 1157, 978 | 871, 857 |
+| 8 | 800x600, 32 | 575, 584 | 666, 678 | 621, 642 | 545, 498 | 393, 373 | 301, 301 |
+
+K = 1 is one step a sweep, its 2 sub-steps fused. A sweep of `K` steps reads each row from memory once, so the 9-point
+gains 1.7 to 2 times on 1 thread and 1.7 to 3.4 times on 8 at its best K. The 4th order gains less, 1.1 to 1.25 times on
+1 thread and 1.03 to 1.5 on 8: its sub-step is two passes of a 13-point stencil through `w`, more arithmetic a row read,
+and past K = 2 to 4 it loses, more on 8 threads. What limits `K` is the trapezoids (blocked.rs): their sides grow by 1
+row a level for the 9-point, 4 with a rim, 6 for the 4th order and 8 with a rim, so the seams' phase, which runs one
+seam per thread on 7 of the 8 and keeps no `w` in rings, takes a growing share; the bands of a sweep also need at least
+twice the side, so a wide trapezoid leaves threads without a band (the 4th order with a rim at K = 8, 16 levels, sides
+of 126 rows: 4 bands at 1080 rows). The rows in flight grow too: per level, a ring of 13 or 14 rows of `w` for the 4th
+order and a few rows of both planes, about 0.8 MB per band at 1920 wide and K = 4, past the 512 KB of L2.
+
+So by default a sweep fuses the most steps, up to 8 ([`FUSED_STEPS`](../crates/waveduderust/src/engine/cpu/mod.rs)),
+whose trapezoids' sides stay within 32 rows ([`FUSED_SIDE`](../crates/waveduderust/src/engine/cpu/mod.rs)): with 2
+sub-steps, the 9-point K = 8 (sides of 15 rows), with a rim K = 4 (30); the 4th order K = 2 (21, with a rim 30). It
+is the best K of the tables or within their noise everywhere but the 4th order at 800x600 without a rim, where K = 3
+or 4 gain 9 to 13 % more, and the 9-point with a rim on 1 thread, where K = 6 gains 5 %. Against a fixed K it gains
+where the rim changes the side's growth: no fixed K serves both, K = 4 costs the 9-point without a rim up to 17 % (1
+thread, 800x600) and the 4th order 14 to 20 % on 8 threads at 1920x1080. A bound on the side as a share of a band's
+rows does not fit: at 800x600 on 8 threads the bands are 75 to 83 rows and the 9-point without a rim and the 4th
+order gain up to sides of 15 and 45 rows. With more sub-steps a step the same bound fuses fewer steps (3 sub-steps:
+the 9-point 8, with a rim 2; the 4th order 1). The rule, from the engine's defaults (two passes):
+
+| Stencil | Threads | Grid, rim | K | Steps a second |
+|---|---|---|---|---|
+| 9-point | 1 | 1920x1080, 0 | 8 | 481, 488 |
+| 9-point | 1 | 1920x1080, 32 | 4 | 255, 244 |
+| 9-point | 1 | 800x600, 0 | 8 | 1841, 1922 |
+| 9-point | 1 | 800x600, 32 | 4 | 719, 705 |
+| 9-point | 8 | 1920x1080, 0 | 8 | 1274, 1395 |
+| 9-point | 8 | 1920x1080, 32 | 4 | 529, 553 |
+| 9-point | 8 | 800x600, 0 | 8 | 5861, 5308 |
+| 9-point | 8 | 800x600, 32 | 4 | 1430, 1659 |
+| 4th order | 1 | 1920x1080, 0 | 2 | 161, 169 |
+| 4th order | 1 | 1920x1080, 32 | 2 | 106, 102 |
+| 4th order | 1 | 800x600, 0 | 2 | 659, 683 |
+| 4th order | 1 | 800x600, 32 | 2 | 312, 324 |
+| 4th order | 8 | 1920x1080, 0 | 2 | 378, 382 |
+| 4th order | 8 | 1920x1080, 32 | 2 | 210, 208 |
+| 4th order | 8 | 800x600, 0 | 2 | 1428, 1357 |
+| 4th order | 8 | 800x600, 32 | 2 | 714, 641 |
+
+CPU use on 8 threads, the 9-point, at a first measurement (in batches of 16 steps), `/usr/bin/time`, 6416 steps of
+1920x1080 (setup included), (user + sys) / wall / 8:
+
+| K, rim | Steps a second | Wall (s) | User + sys (s) | CPU use |
+|---|---|---|---|---|
+| 1, 0 | 360 | 18.2 | 97.8 | 67 % |
+| 1, 32 | 257 | 25.5 | 116.6 | 57 % |
+| 4, 0 | 1007 | 6.8 | 30.5 | 56 % |
+| 4, 32 | 535 | 12.6 | 54.6 | 54 % |
+| 8, 0 | 1271 | 5.5 | 24.5 | 56 % |
+| 8, 32 | 445 | 15.0 | 68.8 | 57 % |
+
+The threads still idle about half the time: the bands wait for the slowest at the end of each phase, the seams' phase
+runs a seam per thread on 7 of the 8, and this host preempts its guest's threads.
+
+The fused steps' values, for both stencils: on the generic backend those of one step a sweep bit for bit, and so the
+previous CPU engine's (the tests then stepped the two side by side; the run worker's frames and traces too,
+run/worker.rs). On the AVX2 backend they agree within 1e-4 of
+the peak, not bit for bit: a sweep's area, grown by `K` steps' reach, splits a row into other spans while the damage
+grows, and the kernel takes a span's last `len % 8` cells through the generic backend's arithmetic. Once the damage
+covers the grid the spans are the same; from a full-damage start the field's difference to the previous engine stays
+the K = 1 engine's (9.6e-7 of the peak at 800x600, rim 32, 8 threads, K = 1, 8 and 16; the 4th order 4.4e-7 at K =
+1, 2 and 8).
+
+### In wasm
+
+The harness of [The CPU engine's wavefront in wasm](#the-cpu-engines-wavefront-in-wasm) (simd128, Node 22.22.1, one
+thread), stepped from the full-damage start above, against master at e6ceae4 built the same way: 48 steps to warm up,
+then 5 runs of 12 (800x600) or 4 (1920x1080) batches of 24 steps, the CPU engine taking each batch with
+`advance_steps(24)`, the others step by step; steps a second, the median run, two passes, `taskset -c 5`, one process
+per figure. Ratios are of the two passes' means, as speed-ups.
+
+| Stencil | Grid, rim | master | Previous CPU engine | CPU, simd128, default K | Previous / master | CPU / master | CPU / previous |
+|---|---|---|---|---|---|---|---|
+| 9-point | 800x600, 0 | 576, 568 | 651, 696 | 951, 921 (K 8) | 1.18 | 1.64 | 1.39 |
+| 9-point | 800x600, 32 | 212, 218 | 277, 264 | 423, 419 (K 4) | 1.26 | 1.96 | 1.56 |
+| 9-point | 1920x1080, 0 | 135, 124 | 143, 140 | 229, 230 (K 8) | 1.09 | 1.77 | 1.62 |
+| 9-point | 1920x1080, 32 | 74, 72 | 96, 98 | 143, 142 (K 4) | 1.33 | 1.96 | 1.47 |
+| 4th order | 800x600, 0 | 290, 288 | 299, 296 | 319, 320 (K 2) | 1.03 | 1.11 | 1.08 |
+| 4th order | 800x600, 32 | 104, 112 | 136, 135 | 177, 178 (K 2) | 1.25 | 1.64 | 1.31 |
+| 4th order | 1920x1080, 0 | 65, 65 | 71, 70 | 72, 77 (K 2) | 1.08 | 1.14 | 1.06 |
+| 4th order | 1920x1080, 32 | 37, 38 | 45, 45 | 53, 56 (K 2) | 1.21 | 1.47 | 1.22 |
+
+The CPU engine at a fixed K (`set_fused_steps`), the two passes' mean:
+
+| Stencil | Grid, rim | K = 1 | 2 | 4 | 8 | 12 | 16 |
+|---|---|---|---|---|---|---|---|
+| 9-point | 800x600, 0 | 656 | 801 | 885 | 934 | 943 | 946 |
+| 9-point | 800x600, 32 | 318 | 392 | 421 | 431 | 423 | 430 |
+| 9-point | 1920x1080, 0 | 164 | 203 | 217 | 229 | 229 | 229 |
+| 9-point | 1920x1080, 32 | 113 | 134 | 143 | 144 | 140 | 134 |
+| 4th order | 800x600, 0 | 303 | 319 | 324 | 320 | 315 | 308 |
+| 4th order | 800x600, 32 | 166 | 177 | 180 | 176 | 164 | 155 |
+| 4th order | 1920x1080, 0 | 73 | 75 | 75 | 70 | 62 | 59 |
+| 4th order | 1920x1080, 32 | 55 | 56 | 55 | 46 | 36 | 36 |
+
+One thread, one band, so no seams' phase: the 9-point gains up to K = 8 and flattens there (12 and 16 gain at most
+1 %), the 4th order peaks at K = 2 to 4 and loses past it, as natively on 1 thread. Fusing gains the 9-point 1.27 to
+1.42 times over K = 1, the 4th order 1.0 to 1.07. The native rule's K is within 2 % of the best K everywhere (the
+9-point with a rim gains 1 to 2 % at K = 8, the 4th order at 800x600 1 to 2 % at K = 4), within the passes'
+spread, so wasm keeps it. The CPU engine is faster than the previous engine in every case, 1.06 to 1.62 times;
+least so the 4th order without a rim, where both engines' DRP arithmetic, not the memory, bounds a step.
+
+Values: the harness steps the fused CPU engine on simd128, on the generic backend and the previous engine in batches of
+24, 312 steps, 200x150 and 333x211, both stencils, rim 0 and 32 (K 8, 4 and 2 as above), and compares the padded field
+and both intensity stages: all bit for bit equal; the benchmark's hashes agree with master's too, but for 2 of the 24
+4th-order processes of the first table, whose field hash differed from the others' (master's engine once, the previous
+engine once, never the CPU engine); 52 further processes per engine (16 at 400x300 and 10 at 800x600 per rim, 1536 steps
+in batches of 24, 6 at a time) gave one hash per grid and rim, the same for all three engines. Like the divergence under
+register pressure in [The CPU engine's wavefront in wasm](#the-cpu-engines-wavefront-in-wasm), not explained, and here
+on engines the web already runs.
+
+## The CPU engine's generic backend vectorised
+
+2026-11-27, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs). Which loops of the generic backend
+(engine/cpu/backend/generic.rs) have a vector body, read from the disassembly: natively from the harness of
+[The CPU engine's fused steps](#the-cpu-engines-fused-steps) (`objdump -d`, the functions of the
+`Generic` instantiations and of `isa::with_avx2` over them, each loop's packed and scalar `addps`, `subps`,
+`mulps`); for aarch64 and wasm32 with simd128 from the library's assembly, built without LTO (the pre-link
+pipeline of an LTO build leaves the vectoriser to the link):
+
+```sh
+CARGO_PROFILE_RELEASE_LTO=false cargo rustc --release -p waveduderust --lib --no-default-features \
+  --target aarch64-unknown-linux-gnu -- --emit=asm
+RUSTFLAGS="--cfg=web_sys_unstable_apis -C target-feature=+simd128" CARGO_PROFILE_RELEASE_LTO=false \
+  cargo rustc --release -p waveduderust --lib --no-default-features --target wasm32-unknown-unknown -- --emit=asm
+```
+
+| Kernel (each on a uniform run and on the planes) | x86-64 before | aarch64, wasm before | x86-64 after | aarch64, wasm after |
+|---|---|---|---|---|
+| 9-point, with and without the stages | SSE2, never AVX2 | NEON, simd128 | SSE2 and AVX2 | NEON, simd128 |
+| 4th order inner (`lap`) | SSE2, never AVX2 | NEON, simd128 | SSE2 and AVX2 | NEON, simd128 |
+| 4th order outer, with and without the stages | scalar | scalar | SSE2 and AVX2 | NEON, simd128 |
+
+Before, the outer update's cell was a closure called from two loops, which stayed out of line, one call per cell;
+and the closures between the row entry and the kernels (`NineLine::row`, `DrpLine`'s, the passes' row closures)
+were left out of line too, so the kernels kept the baseline's instruction set although `isa::wide` ran the row
+compiled for AVX2. Now the outer cell is a function inlined by force, the DRP taps are slices of the span's length
+indexed in step, and those closures are inlined by force where `cpu_wide` is set, on x86-64 (`forced` in
+engine/cpu/mod.rs): every kernel has 4-lane bodies at the x86-64 baseline, in aarch64 and in wasm with simd128, and
+8-lane bodies in `isa::wide`'s AVX2 copy, the remainder of each span scalar. The CPML's loops keep their own
+`isa::wide` and vector bodies ([The CPU engine's AVX2 dispatch](#the-cpu-engines-avx2-dispatch)).
+
+Steps a second, the harness of [The CPU engine's fused steps](#the-cpu-engines-fused-steps) at its
+default K (24 steps to warm up, then 4 to 36 batches of `advance_steps(24)`, 12 to 36 on 8 threads), two passes;
+1 thread is `taskset -c 3`. The SSE2 columns ran with `isa::wide` held to the baseline by an environment variable
+added for the measurement (not kept), previous engine included; "Generic before" is f82ff29 as it runs (its kernels
+at the baseline whatever the CPU); the last two columns are the generic backend over the previous engine, the means
+of the passes:
+
+| Threads | Stencil | Grid, rim | Previous, SSE2 | Previous, AVX2 | Generic before | Generic, SSE2 | Generic, AVX2 | AVX2 backend | Generic / previous, SSE2 | AVX2 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 9-point | 800x600, 0 | 668, 615 | 831, 796 | 970, 947 | 970, 958 | 1464, 1529 | 1714, 1907 | 1.50 | 1.84 |
+| 1 | 9-point | 800x600, 32 | 275, 275 | 336, 324 | 490, 488 | 347, 359 | 602, 635 | 652, 708 | 1.28 | 1.87 |
+| 1 | 9-point | 1920x1080, 0 | 156, 145 | 172, 170 | 222, 235 | 226, 231 | 392, 395 | 476, 491 | 1.52 | 2.29 |
+| 1 | 9-point | 1920x1080, 32 | 94, 95 | 109, 114 | 130, 155 | 126, 129 | 229, 220 | 250, 252 | 1.35 | 2.01 |
+| 1 | 4th order | 800x600, 0 | 353, 346 | 481, 448 | 110, 111 | 347, 343 | 470, 471 | 674, 676 | 0.99 | 1.01 |
+| 1 | 4th order | 800x600, 32 | 133, 136 | 163, 175 | 81, 82 | 153, 162 | 251, 270 | 307, 326 | 1.17 | 1.54 |
+| 1 | 4th order | 1920x1080, 0 | 81, 88 | 109, 112 | 24, 26 | 84, 87 | 121, 131 | 161, 169 | 1.01 | 1.15 |
+| 1 | 4th order | 1920x1080, 32 | 49, 50 | 66, 64 | 21, 22 | 53, 49 | 85, 78 | 102, 92 | 1.04 | 1.26 |
+| 8 | 9-point | 800x600, 0 | 1414, 868 | 1559, 943 | 2522, 2026 | 2803, 2069 | 3908, 2955 | 5024, 3639 | 2.13 | 2.74 |
+| 8 | 9-point | 800x600, 32 | 608, 420 | 556, 560 | 1057, 1100 | 794, 865 | 1366, 1377 | 1482, 1345 | 1.61 | 2.46 |
+| 8 | 9-point | 1920x1080, 0 | 247, 264 | 254, 256 | 616, 865 | 732, 738 | 1066, 1214 | 1447, 1327 | 2.87 | 4.47 |
+| 8 | 9-point | 1920x1080, 32 | 201, 182 | 210, 198 | 394, 407 | 357, 320 | 477, 470 | 543, 527 | 1.77 | 2.32 |
+| 8 | 4th order | 800x600, 0 | 826, 795 | 914, 981 | 329, 352 | 900, 825 | 1128, 1049 | 1376, 1261 | 1.06 | 1.15 |
+| 8 | 4th order | 800x600, 32 | 351, 319 | 388, 395 | 239, 244 | 400, 374 | 592, 555 | 664, 571 | 1.16 | 1.47 |
+| 8 | 4th order | 1920x1080, 0 | 216, 185 | 236, 191 | 94, 92 | 275, 254 | 311, 359 | 368, 327 | 1.32 | 1.57 |
+| 8 | 4th order | 1920x1080, 32 | 135, 132 | 149, 145 | 78, 71 | 144, 148 | 183, 198 | 200, 207 | 1.09 | 1.29 |
+
+The generic backend computes the previous engine's field bit for bit in every run (the harness compares the padded field
+with master's CPU engine, the previous one), as do its AVX2 copy against its baseline copy on the backends' harness
+(generic.rs's unit test) and the engine's tests then. Held to SSE2, the generic backend is now faster than the previous
+engine in every case but the 4th order on one thread without a rim, where they are even (0.99 to 1.01). The default CPU
+engine (engine/mod.rs, `cpu_engine`) was then the present engine only on a backend other than the generic one, so an
+x86-64 CPU without AVX2 and FMA ran the previous engine; by these figures the generic backend could take its place there
+(measured on this CPU held to SSE2, not on an SSE2-only CPU, and not on ARM), as it since has: the previous engine is
+gone.
+
+## The CPU engine against master's
+
+2026-11-28, the workstation's VirtualBox guest (Ryzen 7 4700U, 8 vCPUs). Master's CPU engine (4214f05, v0.4.3)
+against this engine on its AVX2 and generic backends, from a full-damage start (a smooth field over every cell, so
+every step covers the whole grid) on a blank scene with one source in the middle, intensity on, 2 sub-steps a step.
+
+Native x86-64: a harness outside the repository links master's `waveduderust` beside this tree's (both with
+`unstable-engine` and `unstable-scene`, `lto = "thin"`, `codegen-units = 1`) and steps the three engines in rotating
+blocks of 24 steps (this engine through `advance_steps(24)`, at its default K) after 24 steps to warm up, 4 to 12
+blocks each (12 to 36 on 8 threads); 1 thread is `taskset -c 3`. Steps a second, the mean of two passes, in brackets
+the ratio to master; the last column the AVX2 backend's largest difference from master's field, relative to its peak.
+The generic backend computed master's field bit for bit in every run.
+
+| Threads | Stencil | Grid, rim | Master | AVX2 | Generic | AVX2 diff |
+|---|---|---|---|---|---|---|
+| 1 | 9-point | 800x600, 0 | 590 | 1913 (3.24) | 1579 (2.67) | 4.5e-7 |
+| 1 | 9-point | 800x600, 32 | 288 | 706 (2.45) | 632 (2.19) | 6.5e-6 |
+| 1 | 9-point | 1920x1080, 0 | 136 | 495 (3.63) | 408 (3.00) | 4.2e-7 |
+| 1 | 9-point | 1920x1080, 32 | 89 | 243 (2.72) | 215 (2.41) | 8.9e-7 |
+| 1 | 4th order | 800x600, 0 | 303 | 669 (2.21) | 485 (1.60) | 4.3e-7 |
+| 1 | 4th order | 800x600, 32 | 150 | 325 (2.17) | 267 (1.78) | 1.3e-6 |
+| 1 | 4th order | 1920x1080, 0 | 74 | 173 (2.35) | 134 (1.82) | 3.8e-7 |
+| 1 | 4th order | 1920x1080, 32 | 51 | 109 (2.16) | 92 (1.82) | 6.3e-7 |
+| 8 | 9-point | 800x600, 0 | 932 | 5180 (5.55) | 4105 (4.40) | 5.5e-7 |
+| 8 | 9-point | 800x600, 32 | 475 | 1640 (3.45) | 1544 (3.25) | 8.3e-5 |
+| 8 | 9-point | 1920x1080, 0 | 199 | 1445 (7.25) | 1119 (5.61) | 4.7e-7 |
+| 8 | 9-point | 1920x1080, 32 | 152 | 559 (3.68) | 525 (3.46) | 7.9e-6 |
+| 8 | 4th order | 800x600, 0 | 476 | 1317 (2.77) | 1127 (2.37) | 4.6e-7 |
+| 8 | 4th order | 800x600, 32 | 259 | 661 (2.56) | 595 (2.30) | 1.6e-6 |
+| 8 | 4th order | 1920x1080, 0 | 117 | 376 (3.21) | 303 (2.59) | 5.0e-7 |
+| 8 | 4th order | 1920x1080, 32 | 85 | 209 (2.47) | 197 (2.32) | 1.4e-6 |
+
+In wasm: the same scene and start in a wasm-bindgen package per tree (built with simd128, `wasm-opt -O3`), stepped from
+Node 22.22.1 on one thread (`taskset -c 5`): 48 steps to warm up, then the median of 5 runs of 4 to 12 batches of 24
+steps. Master's engine against this engine on its simd128 and generic backends, and on its simd128 backend built with
+relaxed simd as well (`+relaxed-simd`, the lane kernels' multiply-adds as `f32x4.relaxed_madd`; an experiment, not
+kept). Steps a second, the mean of two passes, in brackets the ratio to master (and for relaxed simd to simd128).
+
+| Stencil | Grid, rim | K | Master | simd128 | Generic | Relaxed simd |
+|---|---|---|---|---|---|---|
+| 9-point | 800x600, 0 | 8 | 534 | 899 (1.68) | 886 (1.66) | 910 (1.71; 1.01) |
+| 9-point | 800x600, 32 | 4 | 254 | 393 (1.55) | 404 (1.59) | 405 (1.59; 1.03) |
+| 9-point | 1920x1080, 0 | 8 | 122 | 221 (1.81) | 214 (1.76) | 220 (1.81; 1.00) |
+| 9-point | 1920x1080, 32 | 4 | 83 | 136 (1.63) | 136 (1.64) | 137 (1.64; 1.01) |
+| 4th order | 800x600, 0 | 2 | 268 | 304 (1.14) | 280 (1.05) | 298 (1.11; 0.98) |
+| 4th order | 800x600, 32 | 2 | 131 | 172 (1.31) | 165 (1.26) | 171 (1.30; 1.00) |
+| 4th order | 1920x1080, 0 | 2 | 65 | 75 (1.15) | 72 (1.11) | 75 (1.14; 1.00) |
+| 4th order | 1920x1080, 32 | 2 | 40 | 54 (1.35) | 53 (1.33) | 54 (1.37; 1.01) |
+
+The simd128 and generic backends computed master's field bit for bit (the same hash of the padded field) in every
+case. Relaxed simd differed from the generic backend by 5e-7 to 2.7e-6 of the field's peak after 240 steps, about
+what the AVX2 backend differs natively, and gained 0.98 to 1.03 over simd128: within the runs' spread, so the web
+keeps its two builds (with and without simd128). Two of the 64 runs (one master's 4th order at 800x600, one relaxed
+simd's at 1920x1080) printed a hash once that 6 reruns each did not repeat; the cause is not known.
+
+The generic backend in wasm is within 0.97 to 1.03 of simd128 on the 9-point stencil and 0.92 to 0.99 on the 4th
+order: since it vectorises, the simd128 backend's lead is small.
+
+Built without simd128 (the web's build for engines without it), the same harness steps master's engine and this
+engine, which there runs on the generic backend, in scalar code (no `f32x4` instruction in either module); both
+computed the same field bit for bit:
+
+| Stencil | Grid, rim | K | Master | Generic |
+|---|---|---|---|---|
+| 9-point | 800x600, 0 | 8 | 185 | 248 (1.34) |
+| 9-point | 800x600, 32 | 4 | 109 | 134 (1.23) |
+| 9-point | 1920x1080, 0 | 8 | 44 | 57 (1.31) |
+| 9-point | 1920x1080, 32 | 4 | 32 | 41 (1.27) |
+| 4th order | 800x600, 0 | 2 | 61 | 57 (0.94) |
+| 4th order | 800x600, 32 | 2 | 42 | 41 (0.97) |
+| 4th order | 1920x1080, 0 | 2 | 15 | 14 (0.94) |
+| 4th order | 1920x1080, 32 | 2 | 12 | 11 (0.96) |
+
+The 4th order is 3 to 6 % slower than master's there, presumably because scalar arithmetic rather than memory bounds
+it, so the 2 steps a sweep save less than the blocked steps' rings and seams cost (not profiled). Only engines without
+simd128 run this build.
 
 ## Other operations
 

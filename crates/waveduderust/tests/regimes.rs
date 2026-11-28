@@ -224,7 +224,7 @@ fn a_small_time_decay_clamps_tau_to_one_step() {
 	assert!(unclamped > 1e-2, "replayed at exp(-2): {unclamped:.2e}, want over 1e-2");
 }
 
-/// Without sources the lowest level is 100 (engine/cpu.rs `alpha_follows_the_lowest_level`): a free Gaussian
+/// Without sources the lowest level is 100 (engine/cpu `alpha_follows_the_lowest_level`): a free Gaussian
 /// bump under TimeDecay 10 filters at tau = 10 steps, within 1e-4 of its peak, and more than 1e-2 off a weight of
 /// exp(-1).
 #[test]

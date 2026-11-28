@@ -35,7 +35,7 @@ modified equation (Dablain 1986) cancels leapfrog's leading temporal error
 `dt^4 u_tttt / 12` through `u_tttt = (c^2 L)^2 u`, so time is 4th order like
 space. The engine evaluates it in two passes over the grid: `w = c2 L u`, then
 `u+ = u + ((u - u-) d + (w + c2 L w / 12) h)`, one extra Laplacian and one
-scratch buffer `w` ([engine/cpu.rs](../crates/waveduderust/src/engine/cpu.rs), [engine/stencil.rs](../crates/waveduderust/src/engine/stencil.rs)); d and h are the
+scratch buffer `w` ([engine/cpu](../crates/waveduderust/src/engine/cpu/mod.rs), [engine/stencil.rs](../crates/waveduderust/src/engine/stencil.rs)); d and h are the
 damping's (below).
 
 Damping. A cell of damping factor d per sub-step (`d^(1/n)` of the scene's d
@@ -387,7 +387,8 @@ pass over the grid, times c2, is
     (O_x z~ - D2x z~) + chi D2x delta_y + delta_y
 
 in four stages ([engine/pml.rs](../crates/waveduderust/src/engine/pml.rs); on the GPU four kernels over the rim): psi of y,
-delta_y and xi of y, psi of x on z~, then the x part and the sum. The modified
+delta_y and xi of y, psi of x on z~, then the x part and the sum. On the CPU the first two run over the y strips
+before the pass and the last two on each row the pass writes, right after it. The modified
 equation applies the operator twice per sub-step and keeps a second set of
 psi and xi. Storage: x strips of 2 rim columns over the full height, y strips
 of 2 rim rows over the full width.
@@ -487,7 +488,7 @@ Example18 over 3000 steps likewise on both engines.
 ## Intensity
 
 The intensity is a two-stage exponential moving average of u^2, advanced once
-per step after its last sub-step ([engine/cpu.rs](../crates/waveduderust/src/engine/cpu.rs) `accumulate`, step.wgsl
+per step after its last sub-step ([engine/cpu/backend](../crates/waveduderust/src/engine/cpu/backend/mod.rs) `advance`, step.wgsl
 `accumulate`), with alpha the retention weight:
 
     s1 <- alpha s1 + (1 - alpha) u^2

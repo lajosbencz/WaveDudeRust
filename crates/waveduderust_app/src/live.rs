@@ -1181,8 +1181,13 @@ pub enum EngineLabel {
 	WebGpu,
 	/// The GPU's on the adapter of this name.
 	Gpu(String),
-	/// The CPU engine on this many threads.
-	Cpu { threads: usize },
+	/// The CPU engine on this many threads; `engine` its name (`WaveEngine::name`, e.g. "CPU (avx2)") once it is
+	/// built, None before and in a label written without it.
+	Cpu {
+		threads: usize,
+		#[serde(default)]
+		engine: Option<String>,
+	},
 }
 
 impl EngineLabel {
@@ -1191,7 +1196,19 @@ impl EngineLabel {
 		match gpu {
 			Some("") => Self::WebGpu,
 			Some(name) => Self::Gpu(name.to_owned()),
-			None => Self::Cpu { threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get) },
+			None => Self::Cpu {
+				threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get),
+				engine: None,
+			},
+		}
+	}
+
+	/// The label of a built engine named `engine` ([`WaveEngine::name`]): the GPU named `gpu` when it runs there,
+	/// else the CPU engine with its name.
+	pub fn built(gpu: Option<&str>, engine: &str) -> Self {
+		match Self::of(gpu) {
+			Self::Cpu { threads, .. } => Self::Cpu { threads, engine: Some(engine.to_owned()) },
+			label => label,
 		}
 	}
 
@@ -1202,8 +1219,10 @@ impl EngineLabel {
 			Self::Missing => s.get("EngineNone").to_owned(),
 			Self::WebGpu => s.get("EngineWebGpu").to_owned(),
 			Self::Gpu(name) => s.format("EngineGpuFormat", &[name]),
-			Self::Cpu { threads: 1 } => s.get("EngineCpuOne").to_owned(),
-			Self::Cpu { threads } => s.format("EngineCpuManyFormat", &[threads]),
+			Self::Cpu { threads: 1, engine: None } => s.get("EngineCpuOne").to_owned(),
+			Self::Cpu { threads, engine: None } => s.format("EngineCpuManyFormat", &[threads]),
+			Self::Cpu { threads: 1, engine: Some(name) } => s.format("EngineCpuNamedOneFormat", &[name]),
+			Self::Cpu { threads, engine: Some(name) } => s.format("EngineCpuNamedManyFormat", &[name, threads]),
 		}
 	}
 }
@@ -1216,8 +1235,10 @@ impl std::fmt::Display for EngineLabel {
 			Self::Missing => write!(f, "no engine"),
 			Self::WebGpu => write!(f, "GPU: WebGPU"),
 			Self::Gpu(name) => write!(f, "GPU: {name}"),
-			Self::Cpu { threads: 1 } => write!(f, "CPU (1 thread)"),
-			Self::Cpu { threads } => write!(f, "CPU ({threads} threads)"),
+			Self::Cpu { threads: 1, engine: None } => write!(f, "CPU (1 thread)"),
+			Self::Cpu { threads, engine: None } => write!(f, "CPU ({threads} threads)"),
+			Self::Cpu { threads: 1, engine: Some(name) } => write!(f, "{name}, 1 thread"),
+			Self::Cpu { threads, engine: Some(name) } => write!(f, "{name}, {threads} threads"),
 		}
 	}
 }
@@ -1247,7 +1268,7 @@ impl CoreBackend {
 		let worker = RunWorker::with_memory(
 			Box::new(move |scene, options| {
 				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
-				*lock(&label) = Some(EngineLabel::of(gpu_name().filter(|_| e.is_gpu()).as_deref()));
+				*lock(&label) = Some(EngineLabel::built(gpu_name().filter(|_| e.is_gpu()).as_deref(), e.name()));
 				e
 			}),
 			cache_dir,
@@ -1633,7 +1654,7 @@ pub mod fake {
 		}
 
 		fn engine(&self) -> super::EngineLabel {
-			super::EngineLabel::Cpu { threads: 1 }
+			super::EngineLabel::Cpu { threads: 1, engine: None }
 		}
 	}
 }
@@ -2328,13 +2349,27 @@ mod tests {
 		let labels = [
 			(EngineLabel::of(Some("")), s.get("EngineWebGpu").to_owned()),
 			(EngineLabel::of(Some("RTX")), s.format("EngineGpuFormat", &[&"RTX"])),
-			(EngineLabel::Cpu { threads: 1 }, s.get("EngineCpuOne").to_owned()),
-			(EngineLabel::Cpu { threads: 8 }, s.format("EngineCpuManyFormat", &[&8])),
+			(EngineLabel::Cpu { threads: 1, engine: None }, s.get("EngineCpuOne").to_owned()),
+			(EngineLabel::Cpu { threads: 8, engine: None }, s.format("EngineCpuManyFormat", &[&8])),
+			(
+				EngineLabel::Cpu { threads: 1, engine: Some("CPU (avx2)".into()) },
+				s.format("EngineCpuNamedOneFormat", &[&"CPU (avx2)"]),
+			),
+			(
+				EngineLabel::Cpu { threads: 8, engine: Some("CPU (avx2)".into()) },
+				s.format("EngineCpuNamedManyFormat", &[&"CPU (avx2)", &8]),
+			),
 		];
 		for (label, text) in labels {
 			assert_eq!(label.text(&s), text, "{label:?}");
 			assert_eq!(label.to_string(), text, "the log's English is the English table's");
 		}
+		let EngineLabel::Cpu { threads, .. } = EngineLabel::of(None) else { panic!("the CPU's label") };
+		assert_eq!(
+			EngineLabel::built(None, "CPU (generic)"),
+			EngineLabel::Cpu { threads, engine: Some("CPU (generic)".into()) }
+		);
+		assert_eq!(EngineLabel::built(Some("RTX"), "GPU"), EngineLabel::Gpu("RTX".into()));
 	}
 
 	#[test]

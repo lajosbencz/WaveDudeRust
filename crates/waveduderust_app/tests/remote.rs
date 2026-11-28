@@ -14,10 +14,9 @@ use waveduderust::run::{
 	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory,
 	StoreError, StoreLayout, Token, Wanted, WorkState,
 };
-use waveduderust::unstable::engine::cpu::CpuEngine;
+use waveduderust::unstable::engine::GpuHandle;
 use waveduderust::unstable::engine::gpu::GpuContext;
 use waveduderust::unstable::engine::probes::ProbeTrace;
-use waveduderust::unstable::engine::{GpuHandle, WaveEngine};
 use waveduderust::unstable::spec::{RunRequest, RunSpec, RunSpecError};
 use waveduderust::unstable::sync::lock;
 use waveduderust_app::build_id;
@@ -109,7 +108,8 @@ fn layout(p: &Project) -> StoreLayout {
 /// The same goal run directly on a pumped worker in memory.
 fn direct(p: &Project, wanted: Wanted) -> RunWorker {
 	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
-		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
+		// The CPU engine the worker builds (engine::build): this build's and this CPU's default.
+		Box::pin(async move { waveduderust::unstable::engine::build(scene, options, false).engine })
 	});
 	let w = RunWorker::pumped(start, GIB, GIB, Box::new(Spill::default()), Arc::default());
 	w.set_goal(goal(p, 1, wanted));
@@ -390,6 +390,12 @@ fn send_to_worker(page: &Loopback, message: &ToWorker) {
 	page.post(Envelope { message: postcard::to_allocvec(message).unwrap(), buffer: None });
 }
 
+/// The label of the CPU engine this build and this CPU default to, with its backend.
+fn cpu_label() -> EngineLabel {
+	let spec = RunSpec::create(&project(20), None, PreviewQuality::FULL, Brightness::default(), true).unwrap();
+	EngineLabel::built(None, waveduderust::unstable::engine::build(spec.scene, spec.options, false).engine.name())
+}
+
 #[test]
 fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 	let (page, worker) = Loopback::pair();
@@ -397,7 +403,7 @@ fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), use_gpu: true });
 	send_to_worker(&page, &ToWorker::Goal { goal: goal(&project(20), 1, Wanted::Position), image: None });
 	let built = engines_built(&page, &mut host, 1);
-	assert_eq!(built, [(EngineLabel::of(None), Some("no adapter here".into()))]);
+	assert_eq!(built, [(cpu_label(), Some("no adapter here".into()))]);
 }
 
 #[test]
@@ -467,7 +473,7 @@ fn an_engine_built_after_the_device_was_lost_gets_a_new_device_or_runs_on_the_cp
 
 	lose(&second);
 	fail_then_go_on(&mut host);
-	let cpu = (EngineLabel::of(None), Some("the adapter is gone".to_owned()));
+	let cpu = (cpu_label(), Some("the adapter is gone".to_owned()));
 	assert_eq!(engines_built(&page, &mut host, 1), std::slice::from_ref(&cpu));
 	send_to_worker(&page, &ToWorker::Rebuild { use_gpu: true });
 	assert_eq!(engines_built(&page, &mut host, 1), [cpu]);
