@@ -1,5 +1,5 @@
 # Pinned, so the CI caches (keyed on the compiler) live until the version is bumped here, by Dependabot
 # (.github/dependabot.yml) or by hand.
 [toolchain]
-channel = "1.100.0"
+channel = "1.100.1"
 components = ["clippy", "rustfmt"]
