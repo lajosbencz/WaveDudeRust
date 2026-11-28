@@ -82,7 +82,7 @@ Each row is a label column and its control; a change applies and is saved at onc
 | Preview and memory | Preview frames | drop-down Full, Half (every second frame), Quarter (every fourth frame) | `PreviewFrames` |
 | Preview and memory | Preview samples | drop-down 16-bit float, 8-bit palette index (brightness fixed when the run starts) | `PreviewSampleBytes` |
 | Preview and memory | Preview dithering | drop-down Off, 10, 12, 14, 16 bits per channel; disabled unless samples are 16-bit | `PreviewDitherBits` |
-| Preview and memory | Use the GPU | check box (CPU fallback logged) | `UseGpu` |
+| Preview and memory | Engine (GPU or CPU) | (port) drop-down of the engines this build offers on this machine: GPU (when built in; the CPU's in its place when there is no GPU, logged), then "CPU (<backend>)" for each CPU backend the CPU runs, best first: AVX2, SIMD128 (the browser built with it), Generic; an `Engine` not offered here shows the first entry | `Engine` |
 | Simulation | Re-run automatically after edits | check box | `AutoRerun` |
 | Simulation | Warn when a run does not fit in RAM | check box | `WarnWhenRamInsufficient` |
 | Export | Use Cisco's OpenH264 codec (downloaded from Cisco at the first MP4 export) | check box with Cisco's notice; natively, absent when OpenH264 is compiled in | `UseOpenH264` |
@@ -220,7 +220,8 @@ Content top to bottom:
    Shown: [LICENSE.md](../../LICENSE.md) rendered as a document (headings, lists, links) in a scrollable box (260 px, at most 30% of the window's height, min 120);
    a taller window gives its extra height to the document; hidden: window shrinks back.
 4. "System": read-only text box (max 160 px, scrolls), one line each: Program, Runtime, Operating system,
-   Processor (+ logical cores), GPU setting (on/off), Engine ("GPU: <wgpu adapter name>" or "CPU (n threads)"),
+   Processor (+ logical cores), Engine setting (port: the entry of Settings, Engine, that runs; Next: GPU setting on/off), Engine ("GPU: <wgpu adapter name>" or
+   "CPU (<backend>), n threads"),
    H.264 encoder ("Cisco's OpenH264 2.6.0" when enabled and downloaded, "not enabled", or "OpenH264, compiled
    in"). The original's Memory line is not ported.
    Port, before "System": "OpenH264": Cisco's notice and the toggle "Show the OpenH264 license" / "Hide the

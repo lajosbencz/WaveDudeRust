@@ -1,5 +1,5 @@
 // Mur's first-order condition on the first padding ring, after a sub-step, the second and third
-// continuing the field linearly (engine/cpu.rs, `apply_open_edges`; engine/mur.rs, `mur_weights`): one thread
+// continuing the field linearly (engine/cpu/host.rs, `apply_open_edges`; engine/mur.rs, `mur_weights`): one thread
 // per chain (a grid cell on the edge and the padding cells outward of it).
 
 struct Mur {

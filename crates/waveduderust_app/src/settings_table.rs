@@ -141,7 +141,7 @@ pub enum Setting {
 	Frames,
 	Samples,
 	Dither,
-	UseGpu,
+	Engine,
 	AutoRerun,
 	WarnMemory,
 	OpenH264,
@@ -177,7 +177,7 @@ pub const ROWS: [Row; 20] = [
 	row(Section::Preview, "MenuViewFrames", Need::Always, Setting::Frames),
 	row(Section::Preview, "MenuViewSamples", Need::Always, Setting::Samples),
 	row(Section::Preview, "MenuViewDither", Need::Always, Setting::Dither),
-	row(Section::Preview, "MenuSimulationUseGpu", Need::Always, Setting::UseGpu),
+	row(Section::Preview, "SettingsEngine", Need::Always, Setting::Engine),
 	row(Section::Simulation, "MenuSimulationAutoRerun", Need::Always, Setting::AutoRerun),
 	row(Section::Simulation, "MenuSimulationWarnMemory", Need::Always, Setting::WarnMemory),
 	row(Section::Export, "ExportUseOpenH264", Need::CodecDownload, Setting::OpenH264),
@@ -303,7 +303,10 @@ mod tests {
 	#[test]
 	fn the_search_reads_labels_in_both_languages_and_section_names() {
 		let (en, de) = (Strings::new(Language::English), Strings::new(Language::German));
-		assert_eq!(labels(&found("gpu", &en, NATIVE)), ["MenuSimulationUseGpu"]);
+		for query in ["gpu", "cpu", "engine"] {
+			assert_eq!(labels(&found(query, &en, NATIVE)), ["SettingsEngine"], "{query}");
+		}
+		assert_eq!(labels(&found("moteur", &Strings::new(Language::French), NATIVE)), ["SettingsEngine"]);
 		assert_eq!(labels(&found("undo", &en, NATIVE)), ["SettingsUndoSteps"]);
 		assert_eq!(labels(&found("undo", &de, NATIVE)), ["SettingsUndoSteps"], "English in German");
 		assert_eq!(labels(&found("preview res", &en, NATIVE)), ["MenuViewResolution"], "mnemonics are no text");

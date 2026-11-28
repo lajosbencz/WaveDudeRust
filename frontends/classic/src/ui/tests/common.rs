@@ -7,6 +7,7 @@ use crate::ui::Shell;
 use eframe::egui::{self, PointerButton, Pos2};
 use egui_kittest::Harness;
 use waveduderust::run::Memory;
+use waveduderust::unstable::engine::EngineChoice;
 use waveduderust_app::App;
 use waveduderust_app::log::LogRing;
 use waveduderust_app::platform::Instant;
@@ -30,7 +31,7 @@ pub(crate) fn started(dirs: &AppDirs, first_start: bool) -> App {
 		Event::SetUseOpenH264(false),
 		Event::SetCheckForUpdates(false),
 		Event::SetShowStartup(first_start),
-		Event::SetUseGpu(false),
+		Event::SetEngine(EngineChoice::cpu()),
 	] {
 		app.handle(event, Instant::now());
 	}

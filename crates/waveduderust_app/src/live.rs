@@ -10,9 +10,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
@@ -24,15 +21,14 @@ use waveduderust::run::{
 	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RamCache, RunError, RunState, Status, Wanted,
 	WorkState,
 };
-use waveduderust::unstable::engine::Snapshot;
 use waveduderust::unstable::engine::gpu::DeviceFrames;
 use waveduderust::unstable::engine::probes::ProbeTrace;
+use waveduderust::unstable::engine::{EngineChoice, Snapshot};
 #[cfg(not(target_arch = "wasm32"))]
 use waveduderust::unstable::engine::{EngineOptions, SceneData, WaveEngine};
 use waveduderust::unstable::export::ExportFormat;
 use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 use waveduderust::unstable::spec::{RunRequest, RunSpecError, SceneCache};
-#[cfg(not(target_arch = "wasm32"))]
 use waveduderust::unstable::sync::lock;
 
 use super::commands::ChangeKind;
@@ -1112,10 +1108,28 @@ impl<B: Backend> LiveController<B> {
 	}
 }
 
-/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively.
+/// The engine the live runs build, shared between the settings and the backend, which reads it at each build.
+#[derive(Clone, Debug)]
+pub struct SharedEngine(Arc<Mutex<EngineChoice>>);
+
+impl SharedEngine {
+	pub fn new(choice: EngineChoice) -> Self {
+		Self(Arc::new(Mutex::new(choice)))
+	}
+
+	pub fn get(&self) -> EngineChoice {
+		*lock(&self.0)
+	}
+
+	pub fn set(&self, choice: EngineChoice) {
+		*lock(&self.0) = choice;
+	}
+}
+
+/// The core's live run on the engine of the Engine setting: on a thread of its own natively.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct CoreBackend {
-	use_gpu: Arc<AtomicBool>,
+	engine: SharedEngine,
 	worker: RunWorker,
 	scene: Arc<Mutex<SceneCache>>,
 	/// Where the budgets' memory readings come from.
@@ -1124,7 +1138,7 @@ pub struct CoreBackend {
 	built: Arc<Mutex<Option<EngineLabel>>>,
 }
 
-/// The core's live run in the browser's run worker ([`crate::remote`]), on its GPU by the Use the GPU setting.
+/// The core's live run in the browser's run worker ([`crate::remote`]), on the engine of the Engine setting.
 #[cfg(target_arch = "wasm32")]
 pub struct CoreBackend {
 	remote: Remote<PagePort>,
@@ -1181,8 +1195,13 @@ pub enum EngineLabel {
 	WebGpu,
 	/// The GPU's on the adapter of this name.
 	Gpu(String),
-	/// The CPU engine on this many threads.
-	Cpu { threads: usize },
+	/// The CPU engine on this many threads; `engine` its name (`WaveEngine::name`, e.g. "CPU (avx2)") once it is
+	/// built, None before and in a label written without it.
+	Cpu {
+		threads: usize,
+		#[serde(default)]
+		engine: Option<String>,
+	},
 }
 
 impl EngineLabel {
@@ -1191,7 +1210,19 @@ impl EngineLabel {
 		match gpu {
 			Some("") => Self::WebGpu,
 			Some(name) => Self::Gpu(name.to_owned()),
-			None => Self::Cpu { threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get) },
+			None => Self::Cpu {
+				threads: std::thread::available_parallelism().map_or(1, std::num::NonZero::get),
+				engine: None,
+			},
+		}
+	}
+
+	/// The label of a built engine named `engine` ([`WaveEngine::name`]): the GPU named `gpu` when it runs there,
+	/// else the CPU engine with its name.
+	pub fn built(gpu: Option<&str>, engine: &str) -> Self {
+		match Self::of(gpu) {
+			Self::Cpu { threads, .. } => Self::Cpu { threads, engine: Some(engine.to_owned()) },
+			label => label,
 		}
 	}
 
@@ -1202,8 +1233,10 @@ impl EngineLabel {
 			Self::Missing => s.get("EngineNone").to_owned(),
 			Self::WebGpu => s.get("EngineWebGpu").to_owned(),
 			Self::Gpu(name) => s.format("EngineGpuFormat", &[name]),
-			Self::Cpu { threads: 1 } => s.get("EngineCpuOne").to_owned(),
-			Self::Cpu { threads } => s.format("EngineCpuManyFormat", &[threads]),
+			Self::Cpu { threads: 1, engine: None } => s.get("EngineCpuOne").to_owned(),
+			Self::Cpu { threads, engine: None } => s.format("EngineCpuManyFormat", &[threads]),
+			Self::Cpu { threads: 1, engine: Some(name) } => s.format("EngineCpuNamedOneFormat", &[name]),
+			Self::Cpu { threads, engine: Some(name) } => s.format("EngineCpuNamedManyFormat", &[name, threads]),
 		}
 	}
 }
@@ -1216,8 +1249,10 @@ impl std::fmt::Display for EngineLabel {
 			Self::Missing => write!(f, "no engine"),
 			Self::WebGpu => write!(f, "GPU: WebGPU"),
 			Self::Gpu(name) => write!(f, "GPU: {name}"),
-			Self::Cpu { threads: 1 } => write!(f, "CPU (1 thread)"),
-			Self::Cpu { threads } => write!(f, "CPU ({threads} threads)"),
+			Self::Cpu { threads: 1, engine: None } => write!(f, "CPU (1 thread)"),
+			Self::Cpu { threads, engine: None } => write!(f, "CPU ({threads} threads)"),
+			Self::Cpu { threads: 1, engine: Some(name) } => write!(f, "{name}, 1 thread"),
+			Self::Cpu { threads, engine: Some(name) } => write!(f, "{name}, {threads} threads"),
 		}
 	}
 }
@@ -1228,26 +1263,26 @@ fn gpu_name() -> Option<String> {
 	waveduderust::unstable::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
 }
 
-/// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
+/// Builds the engine `choice` names for a scene; for the GPU's, the CPU's when there is no GPU (logged).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
-	let e = waveduderust::unstable::engine::build(scene, options, use_gpu).engine;
+pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, choice: EngineChoice) -> Box<dyn WaveEngine> {
+	let e = waveduderust::unstable::engine::build(scene, options, choice).engine;
 	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
 	e
 }
 
 impl CoreBackend {
 	/// A backend with its spill files in `cache_dir` and its budgets on `memory`'s readings; the engine follows
-	/// `use_gpu`, shared with the settings.
+	/// `engine`, shared with the settings.
 	#[cfg(not(target_arch = "wasm32"))]
-	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
-		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
+	pub fn new(engine: SharedEngine, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
+		let (choice, built) = (engine.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
 		let label = built.clone();
 		let scene: Arc<Mutex<SceneCache>> = Arc::default();
 		let worker = RunWorker::with_memory(
 			Box::new(move |scene, options| {
-				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
-				*lock(&label) = Some(EngineLabel::of(gpu_name().filter(|_| e.is_gpu()).as_deref()));
+				let e = build_engine(scene, options, choice.get());
+				*lock(&label) = Some(EngineLabel::built(gpu_name().filter(|_| e.is_gpu()).as_deref(), e.name()));
 				e
 			}),
 			cache_dir,
@@ -1255,17 +1290,17 @@ impl CoreBackend {
 			memory,
 		)?;
 		worker.set_notify(Box::new(crate::wake::wake));
-		Ok(Self { use_gpu, worker, scene, memory, built })
+		Ok(Self { engine, worker, scene, memory, built })
 	}
 
 	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
 	/// size or at Auto [`detected_web_frame_memory`], and the rest in the origin private file system. The engine
-	/// runs on the worker's GPU while `use_gpu` holds, else on the CPU.
+	/// is the one `engine` names, shared with the settings.
 	#[cfg(target_arch = "wasm32")]
-	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
+	pub fn new(engine: SharedEngine) -> Self {
 		let frame_memory = detected_web_frame_memory();
 		let port = PagePort::start(&run_worker_url(), crate::wake::wake);
-		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
+		let remote = Remote::new(port, engine, frame_memory, Box::new(super::platform::Opfs::start()));
 		Self { remote, scene: Arc::default() }
 	}
 
@@ -1313,7 +1348,7 @@ impl Backend for CoreBackend {
 		if let Some(label) = &*lock(&self.built) {
 			return label.clone();
 		}
-		EngineLabel::of(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
+		EngineLabel::of(gpu_name().filter(|_| self.engine.get() == EngineChoice::Gpu).as_deref())
 	}
 }
 
@@ -1633,7 +1668,7 @@ pub mod fake {
 		}
 
 		fn engine(&self) -> super::EngineLabel {
-			super::EngineLabel::Cpu { threads: 1 }
+			super::EngineLabel::Cpu { threads: 1, engine: None }
 		}
 	}
 }
@@ -2328,13 +2363,27 @@ mod tests {
 		let labels = [
 			(EngineLabel::of(Some("")), s.get("EngineWebGpu").to_owned()),
 			(EngineLabel::of(Some("RTX")), s.format("EngineGpuFormat", &[&"RTX"])),
-			(EngineLabel::Cpu { threads: 1 }, s.get("EngineCpuOne").to_owned()),
-			(EngineLabel::Cpu { threads: 8 }, s.format("EngineCpuManyFormat", &[&8])),
+			(EngineLabel::Cpu { threads: 1, engine: None }, s.get("EngineCpuOne").to_owned()),
+			(EngineLabel::Cpu { threads: 8, engine: None }, s.format("EngineCpuManyFormat", &[&8])),
+			(
+				EngineLabel::Cpu { threads: 1, engine: Some("CPU (avx2)".into()) },
+				s.format("EngineCpuNamedOneFormat", &[&"CPU (avx2)"]),
+			),
+			(
+				EngineLabel::Cpu { threads: 8, engine: Some("CPU (avx2)".into()) },
+				s.format("EngineCpuNamedManyFormat", &[&"CPU (avx2)", &8]),
+			),
 		];
 		for (label, text) in labels {
 			assert_eq!(label.text(&s), text, "{label:?}");
 			assert_eq!(label.to_string(), text, "the log's English is the English table's");
 		}
+		let EngineLabel::Cpu { threads, .. } = EngineLabel::of(None) else { panic!("the CPU's label") };
+		assert_eq!(
+			EngineLabel::built(None, "CPU (generic)"),
+			EngineLabel::Cpu { threads, engine: Some("CPU (generic)".into()) }
+		);
+		assert_eq!(EngineLabel::built(Some("RTX"), "GPU"), EngineLabel::Gpu("RTX".into()));
 	}
 
 	#[test]

@@ -14,16 +14,17 @@ use waveduderust::run::{
 	EngineFuture, FrameStore, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory,
 	StoreError, StoreLayout, Token, Wanted, WorkState,
 };
-use waveduderust::unstable::engine::cpu::CpuEngine;
+use waveduderust::unstable::engine::cpu::Backend as CpuBackend;
 use waveduderust::unstable::engine::gpu::GpuContext;
 use waveduderust::unstable::engine::probes::ProbeTrace;
-use waveduderust::unstable::engine::{GpuHandle, WaveEngine};
+use waveduderust::unstable::engine::{EngineChoice, GpuHandle};
 use waveduderust::unstable::spec::{RunRequest, RunSpec, RunSpecError};
 use waveduderust::unstable::sync::lock;
 use waveduderust_app::build_id;
-use waveduderust_app::live::{Backend, EngineLabel, LiveController, LiveSettings, Notice, RunFailure};
+use waveduderust_app::live::{Backend, EngineLabel, LiveController, LiveSettings, Notice, RunFailure, SharedEngine};
 use waveduderust_app::remote::protocol::{Layout, Lost, RunStatus, State, ToPage, ToWorker, VERSION};
 use waveduderust_app::remote::{Envelope, GpuRequest, Host, Loopback, Port, Remote, RequestGpu, WorkerGone};
+use waveduderust_app::settings::Engine;
 
 /// The view of every test: a default one, which shows the intensity.
 static V: std::sync::LazyLock<View> = std::sync::LazyLock::new(View::default);
@@ -72,7 +73,7 @@ fn connect_on(
 	gpu: Result<GpuHandle, String>,
 ) -> (Remote<Loopback>, Host<Loopback>) {
 	let (page, worker) = Loopback::pair();
-	let remote = Remote::new(page, Arc::new(AtomicBool::new(use_gpu)), frame_memory, spill);
+	let remote = Remote::new(page, SharedEngine::new(EngineChoice::prefer_gpu(use_gpu)), frame_memory, spill);
 	(remote, Host::new(worker, gpu, no_new_gpu(), None))
 }
 
@@ -109,7 +110,8 @@ fn layout(p: &Project) -> StoreLayout {
 /// The same goal run directly on a pumped worker in memory.
 fn direct(p: &Project, wanted: Wanted) -> RunWorker {
 	let start: PumpedFactory = Box::new(|scene, options| -> EngineFuture {
-		Box::pin(async move { Box::new(CpuEngine::new(scene, options)) as Box<dyn WaveEngine> })
+		// The CPU engine the worker builds (engine::build): this build's and this CPU's default.
+		Box::pin(async move { waveduderust::unstable::engine::build(scene, options, EngineChoice::cpu()).engine })
 	});
 	let w = RunWorker::pumped(start, GIB, GIB, Box::new(Spill::default()), Arc::default());
 	w.set_goal(goal(p, 1, wanted));
@@ -390,20 +392,43 @@ fn send_to_worker(page: &Loopback, message: &ToWorker) {
 	page.post(Envelope { message: postcard::to_allocvec(message).unwrap(), buffer: None });
 }
 
+/// The label of the CPU engine this build and this CPU default to, with its backend.
+fn cpu_label() -> EngineLabel {
+	let spec = RunSpec::create(&project(20), None, PreviewQuality::FULL, Brightness::default(), true).unwrap();
+	EngineLabel::built(
+		None,
+		waveduderust::unstable::engine::build(spec.scene, spec.options, EngineChoice::cpu()).engine.name(),
+	)
+}
+
 #[test]
 fn the_engine_built_and_why_the_gpu_fell_back_reach_the_page() {
 	let (page, worker) = Loopback::pair();
 	let mut host = Host::new(worker, Err("no adapter here".into()), no_new_gpu(), None);
-	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), use_gpu: true });
+	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), engine: Engine::Gpu });
 	send_to_worker(&page, &ToWorker::Goal { goal: goal(&project(20), 1, Wanted::Position), image: None });
 	let built = engines_built(&page, &mut host, 1);
-	assert_eq!(built, [(EngineLabel::of(None), Some("no adapter here".into()))]);
+	assert_eq!(built, [(cpu_label(), Some("no adapter here".into()))]);
+}
+
+#[test]
+fn the_worker_builds_the_cpu_backend_the_page_names() {
+	let (page, worker) = Loopback::pair();
+	let mut host = Host::new(worker, Err("no adapter here".into()), no_new_gpu(), None);
+	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), engine: Engine::CpuGeneric });
+	send_to_worker(&page, &ToWorker::Goal { goal: goal(&project(20), 1, Wanted::Position), image: None });
+	let generic = EngineLabel::built(None, CpuBackend::Generic.engine_name());
+	assert_eq!(engines_built(&page, &mut host, 1), [(generic, None)]);
+	let best = CpuBackend::best();
+	send_to_worker(&page, &ToWorker::Rebuild { engine: Engine::of(EngineChoice::Cpu(best)) });
+	assert_eq!(engines_built(&page, &mut host, 1), [(EngineLabel::built(None, best.engine_name()), None)]);
 }
 
 #[test]
 fn the_engine_reads_as_starting_until_the_worker_is_ready() {
 	let (page, worker) = Loopback::pair();
-	let mut remote = Remote::new(page, Arc::new(AtomicBool::new(true)), GIB, Box::new(Spill::default()));
+	let mut remote =
+		Remote::new(page, SharedEngine::new(EngineChoice::prefer_gpu(true)), GIB, Box::new(Spill::default()));
 	assert_eq!(remote.engine(), EngineLabel::Starting);
 	send(&worker, &ToPage::Ready { version: VERSION, build: build_id(), gpu: Ok("RTX".into()) }, None);
 	remote.pump();
@@ -445,7 +470,7 @@ fn an_engine_built_after_the_device_was_lost_gets_a_new_device_or_runs_on_the_cp
 	});
 	let (page, worker) = Loopback::pair();
 	let mut host = Host::new(worker, Ok(first.clone()), request, None);
-	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), use_gpu: true });
+	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: build_id(), engine: Engine::Gpu });
 	send_to_worker(&page, &ToWorker::Goal { goal: goal(&project(20), 1, Wanted::Position), image: None });
 	let gpu = EngineLabel::of(Some(&first.info.name));
 	assert_eq!(engines_built(&page, &mut host, 1), [(gpu.clone(), None)]);
@@ -454,7 +479,7 @@ fn an_engine_built_after_the_device_was_lost_gets_a_new_device_or_runs_on_the_cp
 	let mut revision = 1;
 	let mut fail_then_go_on = |host: &mut Host<Loopback>| {
 		revision += 1;
-		send_to_worker(&page, &ToWorker::Rebuild { use_gpu: true });
+		send_to_worker(&page, &ToWorker::Rebuild { engine: Engine::Gpu });
 		failed(&page, host);
 		let next = goal(&project(20), revision, Wanted::Position);
 		send_to_worker(&page, &ToWorker::Goal { goal: next, image: None });
@@ -467,9 +492,9 @@ fn an_engine_built_after_the_device_was_lost_gets_a_new_device_or_runs_on_the_cp
 
 	lose(&second);
 	fail_then_go_on(&mut host);
-	let cpu = (EngineLabel::of(None), Some("the adapter is gone".to_owned()));
+	let cpu = (cpu_label(), Some("the adapter is gone".to_owned()));
 	assert_eq!(engines_built(&page, &mut host, 1), std::slice::from_ref(&cpu));
-	send_to_worker(&page, &ToWorker::Rebuild { use_gpu: true });
+	send_to_worker(&page, &ToWorker::Rebuild { engine: Engine::Gpu });
 	assert_eq!(engines_built(&page, &mut host, 1), [cpu]);
 	assert_eq!(lock(&made).len(), 2, "a failed request is kept");
 }
@@ -559,7 +584,7 @@ fn a_store_waits_for_the_pages_spill_to_answer() {
 /// A page whose worker end the test plays.
 fn page() -> (Remote<Loopback>, Loopback) {
 	let (page, worker) = Loopback::pair();
-	(Remote::new(page, Arc::new(AtomicBool::new(false)), GIB, Box::new(Spill::default())), worker)
+	(Remote::new(page, SharedEngine::new(EngineChoice::prefer_gpu(false)), GIB, Box::new(Spill::default())), worker)
 }
 
 fn send(worker: &Loopback, message: &ToPage, buffer: Option<Vec<u8>>) {
@@ -645,7 +670,10 @@ fn a_worker_of_another_protocol_version_is_gone_and_does_not_listen_to_the_page(
 
 	let (page, worker) = Loopback::pair();
 	let mut host = Host::new(worker, Err("none".into()), no_new_gpu(), None);
-	send_to_worker(&page, &ToWorker::Init { version: VERSION + 1, build: build_id(), use_gpu: false });
+	send_to_worker(
+		&page,
+		&ToWorker::Init { version: VERSION + 1, build: build_id(), engine: Engine::of(EngineChoice::cpu()) },
+	);
 	page.post(Envelope { message: vec![0xff; 3], buffer: None });
 	assert_eq!(host.pump(SLICE, Waker::noop()), Pump::Idle, "an unreadable message of another version is dropped");
 	assert!(matches!(received(&page).first(), Some(ToPage::Ready { version: VERSION, .. })));
@@ -663,7 +691,7 @@ fn a_worker_of_another_build_is_gone_and_does_not_listen_to_a_page_of_another() 
 
 	let (page, worker) = Loopback::pair();
 	let mut host = Host::new(worker, Err("none".into()), no_new_gpu(), None);
-	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: other, use_gpu: false });
+	send_to_worker(&page, &ToWorker::Init { version: VERSION, build: other, engine: Engine::of(EngineChoice::cpu()) });
 	send_to_worker(&page, &ToWorker::Goal { goal: goal(&project(20), 1, Wanted::Position), image: None });
 	assert_eq!(host.pump(SLICE, Waker::noop()), Pump::Idle, "the goal of a page of another build is dropped");
 	let adopted = received(&page).into_iter().find_map(|m| match m {
@@ -678,7 +706,8 @@ fn the_worker_checks_a_grid_against_the_device_memory_and_against_none_where_unk
 	const MEMORY: u64 = 1 << 10;
 	let p = project(20);
 	let (page, worker) = Loopback::pair();
-	let mut remote = Remote::new(page, Arc::new(AtomicBool::new(false)), GIB, Box::new(Spill::default()));
+	let mut remote =
+		Remote::new(page, SharedEngine::new(EngineChoice::prefer_gpu(false)), GIB, Box::new(Spill::default()));
 	let mut host = Host::new(worker, Err("none".into()), no_new_gpu(), Some(MEMORY));
 	remote.set_goal(goal(&p, 1, Wanted::All));
 	drive(&mut remote, &mut host, |r| matches!(r.status().state, WorkState::Failed(_)));

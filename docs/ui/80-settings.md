@@ -7,7 +7,7 @@ values at their default omitted). Port: JSON in the platform's config dir under 
 CLI reads and writes the same file for its OpenH264 commands.
 These are the program's settings, never the project's. Written on change (a change in Settings saves at once) and on close.
 The user-facing ones are set in File > Settings... ([`70-dialogs-and-windows.md`](70-dialogs-and-windows.md), decision 0027).
-The port's file carries a `Version` (written always, 2 now; a file without it is version 0) and is written to a
+The port's file carries a `Version` (written always, 3 now; a file without it is version 0) and is written to a
 temporary file beside it, then renamed over it, so a crash mid-write leaves the old file whole (as a project is,
 [spec/60](../spec/60-file-formats.md)).
 
@@ -15,6 +15,8 @@ A value that cannot be read (a wrong type, another version's choice): logged wit
 the other values kept. A key this version does not know (another version's setting) is kept and written back. A
 file that is no JSON object: logged with its text quoted (the next save overwrites it with defaults); never moved
 aside. An unreadable file is not a first start. Version 2 drops `FrameMemoryPercent` (logged with its value).
+Version 3 replaces `UseGpu` with `Engine`: true reads as `Gpu`, false as the best CPU backend of the machine reading
+it; an `Engine` beside it wins, a `UseGpu` that is no bool is logged; `UseGpu` is not written back.
 
 | Setting | Type | Default | Set where |
 |---|---|---|---|
@@ -30,7 +32,7 @@ aside. An unreadable file is not a first start. Version 2 drops `FrameMemoryPerc
 | PreviewOrientation | Horizontal (side by side) / Vertical (stacked) | Vertical | transport bar layout radios |
 | AutoRerun | bool | true | Settings > Simulation |
 | WarnWhenRamInsufficient | bool | true | Settings > Simulation; memory warning "Do not warn me again" |
-| UseGpu | bool | true | Settings > Preview and memory |
+| Engine | (port) Gpu / CpuAvx2 / CpuGeneric / CpuSimd128 (the CPU engine on that backend, [spec/30](../spec/30-engine.md)); one this build or this machine lacks is kept as written and runs as the best of its kind: a CPU backend as the best CPU backend here, the GPU as the first available (the best CPU backend without the GPU built in) | Gpu | Settings > Preview and memory |
 | FrameMemoryBytes | (port) int bytes; 0 = Auto, else 256 MiB, 512 MiB, 1 GiB or 2 GiB, any other value reads as Auto (the browser; natively unused) | 0 (Auto) | Settings > Preview and memory, RAM; memory warning lever |
 | PreviewResolution | 1 / 2 / 4 | 1 (first start may choose 2) | Settings > Preview and memory (lever or preset); memory warning |
 | PreviewFrames | 1 / 2 / 4 | 1 (first start may choose 2) | Settings > Preview and memory (lever or preset); memory warning |

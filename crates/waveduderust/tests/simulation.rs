@@ -4,9 +4,8 @@
 use waveduderust::model::normalize::Normalize;
 use waveduderust::model::{Layer, Measurement, Probe, ProbeKind, Project, Source};
 use waveduderust::quality::{Brightness, PreviewQuality};
-use waveduderust::unstable::engine::WaveEngine;
-use waveduderust::unstable::engine::cpu::CpuEngine;
 use waveduderust::unstable::engine::probes::{ProbeCollector, record};
+use waveduderust::unstable::engine::{self, WaveEngine};
 use waveduderust::unstable::spec::RunSpec;
 use waveduderust::{Backend, Simulation, SimulationError};
 
@@ -49,7 +48,9 @@ fn cpu(p: &Project) -> Simulation {
 fn field_and_traces_match_a_hand_driven_engine() {
 	let p = project();
 	let spec = RunSpec::create(&p, None, PreviewQuality::FULL, Brightness::default(), true).unwrap();
-	let mut e: Box<dyn WaveEngine> = Box::new(CpuEngine::new(spec.scene.clone(), spec.options.clone()));
+	// The engine `Backend::Cpu` builds: the CPU engine this build and this CPU default to.
+	let mut e: Box<dyn WaveEngine> =
+		engine::build(spec.scene.clone(), spec.options.clone(), engine::EngineChoice::cpu()).engine;
 	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
 	e.set_emitters(&spec.emitters);
 	e.set_probes(collector.cells());
@@ -89,6 +90,47 @@ fn a_run_past_the_drains_keeps_every_reading() {
 	sim.run(600).unwrap();
 	let lens = sim.traces().unwrap().map(|(_, t)| (t.series.len(), t.profiles.len())).collect::<Vec<_>>();
 	assert_eq!(lens, [(600, 0), (600, 0), (0, 200)]);
+}
+
+/// `run` hands the engine batches it may fuse (`WaveEngine::advance_steps`), each ending at a drain of the probe
+/// readings: the traces are those of one step at a time, every reading kept, within the rounding a fused sweep of a
+/// faster backend than the generic one may change (tests/cpu.rs; bit for bit there and in the run worker's tests).
+#[test]
+fn runs_in_batches_step_as_single_steps() {
+	use waveduderust::model::Stencil;
+	for stencil in [Stencil::NinePoint, Stencil::FourthOrder] {
+		batches_step_as_single_steps(stencil);
+	}
+}
+
+fn batches_step_as_single_steps(stencil: waveduderust::model::Stencil) {
+	let mut p = project();
+	p.simulation.steps = 600;
+	p.simulation.stencil = stencil;
+	p.normalize();
+	let mut batched = cpu(&p);
+	for steps in [7, 250, 343] {
+		batched.run(steps).unwrap();
+	}
+	let mut single = cpu(&p);
+	for _ in 0..600 {
+		single.step().unwrap();
+	}
+	assert_eq!((batched.time(), single.time()), (600, 600));
+	let traces = |sim: &mut Simulation| sim.traces().unwrap().map(|(_, t)| t.clone()).collect::<Vec<_>>();
+	let (a, b) = (traces(&mut batched), traces(&mut single));
+	for (a, b) in a.iter().zip(&b) {
+		assert_eq!(
+			(a.series.len(), a.profiles.len(), a.steps_sampled),
+			(b.series.len(), b.profiles.len(), b.steps_sampled)
+		);
+		let peak = b.series.iter().fold(0f32, |m, v| m.max(v.abs()));
+		let diff = a.series.iter().zip(&b.series).fold(0f32, |m, (x, y)| m.max((x - y).abs()));
+		assert!(diff <= 1e-4 * peak, "{stencil:?}: the batched trace differs by {diff} of {peak}");
+	}
+	let (fa, fb) = (batched.field().unwrap().field, single.field().unwrap().field);
+	let peak = fb.iter().fold(0f32, |m, v| m.max(v.abs()));
+	assert!(peak > 0.0 && fa.iter().zip(&fb).all(|(x, y)| (x - y).abs() <= 1e-4 * peak));
 }
 
 #[test]
@@ -185,8 +227,7 @@ mod background {
 
 	#[test]
 	fn index_frames_are_the_field_within_a_level() {
-		let index =
-			PreviewQuality { format: waveduderust::unstable::engine::SampleFormat::Index, ..PreviewQuality::FULL };
+		let index = PreviewQuality { format: engine::SampleFormat::Index, ..PreviewQuality::FULL };
 		let (field, _, _) = gaps(index, 13);
 		let brightness = Brightness::default().field as f32;
 		// a level of the truncating quantiser, the half rounding before it

@@ -102,7 +102,11 @@ impl SimulationBuilder {
 			Brightness::default(),
 			self.track_intensity,
 		)?;
-		let built = engine::build(spec.scene.clone(), spec.options.clone(), self.backend != Backend::Cpu);
+		let built = engine::build(
+			spec.scene.clone(),
+			spec.options.clone(),
+			engine::EngineChoice::prefer_gpu(self.backend != Backend::Cpu),
+		);
 		if let (Backend::Gpu, Some(why)) = (self.backend, built.fallback.clone()) {
 			return Err(SimulationError::NoGpu(why));
 		}
@@ -162,9 +166,24 @@ impl Simulation {
 		Ok(())
 	}
 
-	/// Advances `steps` time steps.
+	/// Advances `steps` time steps, as many [`step`](Self::step)s would: in batches the engine may fuse
+	/// (`WaveEngine::advance_steps`), each ending before the drain of the probe readings that follows its last step.
 	pub fn run(&mut self, steps: u32) -> Result<(), SimulationError> {
-		(0..steps).try_for_each(|_| self.step())
+		let limit = self.engine.fused_steps().max(1);
+		let mut left = steps;
+		while left > 0 {
+			let probes = self.collector.is_some();
+			let mut k = left.min(limit);
+			if probes {
+				k = k.min(PROBE_DRAIN - self.engine.time() % PROBE_DRAIN);
+			}
+			self.engine.advance_steps(k, probes)?;
+			if probes && self.engine.time().is_multiple_of(PROBE_DRAIN) {
+				self.drain()?;
+			}
+			left -= k;
+		}
+		Ok(())
 	}
 
 	/// Steps done.

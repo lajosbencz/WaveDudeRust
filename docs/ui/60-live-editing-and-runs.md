@@ -21,8 +21,9 @@ Edits of two classes at once (an undo, a paste) take the least destructive effec
 with a brightness change keeps the frames unless the preview samples are 8-bit.
 
 The status bar's run line says Running while frames are made, Stopped when some are missing and no more are wanted, Completed when all are there.
-It ends with the engine: "GPU: <adapter>" ("GPU: WebGPU" in the browser), "CPU (1 thread)" or "CPU (n threads)"; in
-the browser "engine starting" until the run worker is ready, "no engine" when it is gone before it built one.
+It ends with the engine: "GPU: <adapter>" ("GPU: WebGPU" in the browser), or the CPU engine with its backend, "CPU
+(avx2), 1 thread" or "CPU (avx2), n threads" ("CPU (n threads)" before it is built); in the browser "engine starting"
+until the run worker is ready, "no engine" when it is gone before it built one.
 
 ## The live run
 
@@ -43,7 +44,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - A pause with an edited project adopts the edit at once: the old frames go, the new run waits paused. A
   pause with nothing left to do is no pause: the run reads Completed. A pause holds the fill, not the frame
   looked at: a scrub while paused still shows its frame.
-- Switching the device (Settings, Use the GPU) builds the engine anew at its next work; frames and traces
+- Switching the engine (Settings, Engine) builds it anew at its next work; frames and traces
   stay. Showing the intensity picture makes the run track it, so the frames are made again.
 - A goal change is looked at every 16 steps. Work goes on for the project as it is now alone: an edit leaves
   the frame being made and starts one run of the edited project; a frame for later or the probes' tail is

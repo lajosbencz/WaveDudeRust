@@ -7,7 +7,6 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -16,12 +15,12 @@ use waveduderust::run::{
 	EngineFuture, Goal, Pump, PumpedFactory, RamCache, RunError, RunWorker, SpillBackend, SpillFactory, Status,
 	StoreLayout, Token, WorkState,
 };
-use waveduderust::unstable::engine::{Built, GpuHandle, build_on};
+use waveduderust::unstable::engine::{Built, EngineChoice, GpuHandle, build_on};
 use waveduderust::unstable::sync::lock;
 
 use super::protocol::{Failure, Layout, RunStatus, State, ToPage, ToWorker, Trace, VERSION};
 use super::{Envelope, Port, decode, post, version_of};
-use crate::live::EngineLabel;
+use crate::live::{EngineLabel, SharedEngine};
 use crate::platform::{Duration, Instant};
 
 /// The most often progress is posted; a change of state is posted at once.
@@ -114,7 +113,7 @@ pub struct Host<P: Port> {
 	port: P,
 	worker: RunWorker,
 	gpu: Arc<Gpu>,
-	use_gpu: Arc<AtomicBool>,
+	engine: SharedEngine,
 	/// The scene image the page posted last: (key, bytes).
 	image: Option<(u64, Arc<[u8]>)>,
 	/// The goal's project before, kept for an equal one: the run builds a spec per project pointer.
@@ -139,14 +138,14 @@ impl<P: Port> Host<P> {
 	/// unknown); posts [`ToPage::Ready`].
 	pub fn new(port: P, gpu: Result<GpuHandle, String>, request: RequestGpu, memory: Option<u64>) -> Self {
 		let queue = Arc::<Mutex<Queue>>::default();
-		let use_gpu = Arc::new(AtomicBool::new(false));
+		let engine = SharedEngine::new(EngineChoice::cpu());
 		let ready = gpu.as_ref().map(|ctx| ctx.info.name.clone()).map_err(Clone::clone);
 		#[cfg_attr(
 			target_arch = "wasm32",
 			allow(clippy::arc_with_non_send_sync, reason = "wgpu's types are not Send there")
 		)]
 		let gpu = Arc::new(Gpu { request, device: Mutex::new(gpu) });
-		let factory = engines(gpu.clone(), use_gpu.clone(), queue.clone());
+		let factory = engines(gpu.clone(), engine.clone(), queue.clone());
 		let worker = RunWorker::pumped(
 			factory,
 			memory.unwrap_or(u64::MAX),
@@ -159,7 +158,7 @@ impl<P: Port> Host<P> {
 			port,
 			worker,
 			gpu,
-			use_gpu,
+			engine,
 			image: None,
 			project: None,
 			queue,
@@ -206,14 +205,14 @@ impl<P: Port> Host<P> {
 		}
 		let message: ToWorker = decode(&envelope).expect("the page posts messages of the protocol");
 		match message {
-			ToWorker::Init { version: _, build, use_gpu } => {
+			ToWorker::Init { version: _, build, engine } => {
 				let worker = crate::build_id();
 				if build != worker {
 					tracing::error!("the page is build {build}, this worker {worker}: it is not listened to");
 					self.deaf = true;
 					return;
 				}
-				self.use_gpu.store(use_gpu, Ordering::Relaxed);
+				self.engine.set(engine.choice());
 			}
 			ToWorker::Image { key } => {
 				let bytes = envelope.buffer.expect("an image comes with its bytes");
@@ -224,8 +223,8 @@ impl<P: Port> Host<P> {
 				goal.ram_cache = RamCache::Auto;
 				self.worker.set_goal(goal);
 			}
-			ToWorker::Rebuild { use_gpu } => {
-				self.use_gpu.store(use_gpu, Ordering::Relaxed);
+			ToWorker::Rebuild { engine } => {
+				self.engine.set(engine.choice());
 				self.worker.rebuild_engine();
 			}
 			ToWorker::Discard => self.worker.discard_frames(),
@@ -351,13 +350,13 @@ impl<P: Port> Host<P> {
 	}
 }
 
-/// Engines on `gpu`'s device while `use_gpu` holds, else the CPU's; each one built is queued for the page, which
-/// logs why the CPU's runs in place of the GPU's.
-fn engines(gpu: Arc<Gpu>, use_gpu: Arc<AtomicBool>, queue: Arc<Mutex<Queue>>) -> PumpedFactory {
+/// The engines `engine` names: the GPU's on `gpu`'s device, or the CPU's on its backend; each one built is queued
+/// for the page, which logs why the CPU's runs in place of the GPU's.
+fn engines(gpu: Arc<Gpu>, engine: SharedEngine, queue: Arc<Mutex<Queue>>) -> PumpedFactory {
 	Box::new(move |scene, options| -> EngineFuture {
-		let (gpu, use_gpu, queue) = (gpu.clone(), use_gpu.load(Ordering::Relaxed), queue.clone());
+		let (gpu, choice, queue) = (gpu.clone(), engine.get(), queue.clone());
 		Box::pin(async move {
-			let (device, refused) = if use_gpu {
+			let (device, refused) = if choice == EngineChoice::Gpu {
 				match gpu.device().await {
 					Ok(ctx) => (Some(ctx), None),
 					Err(why) => (None, Some(why)),
@@ -366,10 +365,10 @@ fn engines(gpu: Arc<Gpu>, use_gpu: Arc<AtomicBool>, queue: Arc<Mutex<Queue>>) ->
 				(None, None)
 			};
 			let name = device.as_ref().map(|ctx| ctx.info.name.clone());
-			let Built { engine, fallback } = build_on(scene, options, device).await;
+			let Built { engine, fallback } = build_on(scene, options, device, choice.cpu_backend()).await;
 			crate::log::engine_built(engine.name(), engine.scene(), engine.options(), engine.sub_steps());
 			let item = Item::Engine {
-				engine: EngineLabel::of(name.filter(|_| engine.is_gpu()).as_deref()),
+				engine: EngineLabel::built(name.filter(|_| engine.is_gpu()).as_deref(), engine.name()),
 				fallback: fallback.map(|f| f.to_string()).or(refused),
 			};
 			lock(&queue).push_back(item);

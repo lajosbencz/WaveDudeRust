@@ -1,4 +1,4 @@
-// Sources as forcing (engine/forcing.rs, engine/cpu.rs `force_w` and `force_next`): one thread per
+// Sources as forcing (engine/forcing.rs, engine/cpu/host.rs `force_w` and `force_next`): one thread per
 // driven cell adds its live values in order. groups: [(cell, start, len, h bits) * group_count,
 // entries...]; an entry indexes the sub-step's values (0..255 the image level table, 256 + k object
 // emitter k); a zero value is not live. `force_w` adds F to the modified

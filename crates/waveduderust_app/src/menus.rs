@@ -654,13 +654,12 @@ fn block_moves(mut indices: Vec<usize>, len: usize, up: bool) -> Vec<(usize, usi
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
-	use std::sync::atomic::AtomicBool;
+	use waveduderust::unstable::engine::EngineChoice;
 
 	use crate::Event;
 	use crate::commands::Command;
-	use crate::live::RunNeeds;
 	use crate::live::fake::FakeBackend;
+	use crate::live::{RunNeeds, SharedEngine};
 	use crate::platform::Instant;
 	use crate::settings::Settings;
 	use crate::strings::{Language, Strings, mnemonic};
@@ -669,7 +668,12 @@ mod tests {
 	use super::*;
 
 	fn app() -> AppState<FakeBackend> {
-		AppState::with_backend(Settings::default(), None, FakeBackend::default(), Arc::new(AtomicBool::new(false)))
+		AppState::with_backend(
+			Settings::default(),
+			None,
+			FakeBackend::default(),
+			SharedEngine::new(EngineChoice::cpu()),
+		)
 	}
 
 	#[test]

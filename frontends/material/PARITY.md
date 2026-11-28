@@ -331,7 +331,7 @@ gallery as the start surface, Settings and About as pages over the workspace.
 | SET-02 | General: Theme, UI zoom (with `--zoom` value), Full path in the title, Show the welcome page, Undo steps | 70 Settings | done: Undo steps is a log-scale whole-number `NumberField`, set on Enter or focus loss, its tip as supporting text; log ties differ by float noise (DESIGN.md section 13) |
 | SET-03 | General: Language | 70 Settings | dropped (brief) |
 | SET-04 | Preview and memory: RAM (native read-only, browser sizes), presets | 70 Settings | changed: native read-only RAM only; the browser's sizes in the web build |
-| SET-05 | Preview resolution, frames, samples, dithering (only with 16-bit), Use the GPU | 70 Settings | done |
+| SET-05 | Preview resolution, frames, samples, dithering (only with 16-bit), Use the GPU | 70 Settings | changed: Use the GPU is the Engine drop-down of the GPU and the CPU backends (port) |
 | SET-06 | Simulation: Re-run automatically, Warn when a run does not fit | 70 Settings | done |
 | SET-07 | Export: Use OpenH264 (absent when compiled in), H.264 profile, Archive (native) | 70 Settings | changed: a profile the encoder lacks is named in the supporting text and not taken, not greyed (library) |
 | SET-08 | Updates: Look at each launch, Check now (updater builds) | 70 Settings | done |

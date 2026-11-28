@@ -1,10 +1,10 @@
-//! The rectangle of grid cells a CPU pass runs on (engine/cpu.rs, Damage).
+//! The rectangle of grid cells a CPU pass runs on (engine/cpu, Damage).
 
 use std::ops::Range;
 
 use super::stencil::PAD;
 
-/// The rectangle of grid cells `x` by `y` that may hold a value (engine/cpu.rs, Damage); empty when either range is.
+/// The rectangle of grid cells `x` by `y` that may hold a value (engine/cpu, Damage); empty when either range is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Damage {
 	pub x: Range<usize>,

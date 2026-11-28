@@ -25,9 +25,12 @@
 //! (O_x z~ - D2x z~) + chi D2x delta_y + delta_y
 //! ```
 //!
-//! which the engine adds times c2 after each pass over the grid, in four stages over the rim: psi of y on u,
-//! `delta_y` (stored) and xi of y, psi of x on z~, then the x part and the sum. A scheme applying the operator twice
-//! (the modified equation) keeps a second set of memory variables.
+//! which the engine adds times c2 to what each pass over the grid writes, in four stages over the rim: psi of y on u,
+//! `delta_y` (stored) and xi of y, psi of x on z~, then the x part and the sum. The first two read only the field and
+//! run over the y strips before the pass ([`CpuPml::begin`]); the last two need nothing beyond their row, so the pass
+//! runs them on each row right after writing it ([`XShared::row`]), and the result is that of a pass over the rim
+//! after the pass over the grid. A scheme applying the operator twice (the modified equation) keeps a second set of
+//! memory variables.
 //!
 //! Storage covers the rim only: `psi` and `xi` of x over the left and right strips (full height, 2 rim columns a
 //! row), of y over the top and bottom strips (2 rim rows of full width), x first; `delta_y` follows xi over the y
@@ -38,11 +41,13 @@ use std::ops::Range;
 use rayon::prelude::*;
 
 use super::damage::Damage;
+use super::isa;
 use super::stencil::PAD;
 use super::types::{PmlLayer, SceneData};
 
-/// Cells, along either axis, from which one [`CpuPml::apply`] reads the field into a correction: psi takes D1 (2
-/// cells), `delta_y` and `O_x` take D1 of psi (2 more), and the stencil's taps of z~ reach at most 3.
+/// Cells, along either axis, from which one application ([`CpuPml::begin`] and [`XShared::row`]) reads the field into
+/// a correction: psi takes D1 (2 cells), `delta_y` and `O_x` take D1 of psi (2 more), and the stencil's taps of z~
+/// reach at most 3.
 pub const REACH: usize = 4;
 
 /// Bits of a cell's cut byte: a mirror at -1, -2, +1, +2 along x, then along y.
@@ -195,7 +200,7 @@ pub fn cut_taps(t: [f32; 7], bits: u8) -> [f32; 7] {
 }
 
 /// Second derivative from `taps` with the weights a1..a3 (a0 = -2 (a1 + a2 + a3)), as differences
-/// from the centre (engine/cpu.rs).
+/// from the centre (engine/cpu).
 #[inline]
 pub fn second(t: &[f32; 7], a: &[f32; 4]) -> f32 {
 	let pair = |m: usize| (t[3 - m] - t[3]) + (t[3 + m] - t[3]);
@@ -284,24 +289,78 @@ impl CpuPml {
 		})
 	}
 
+	/// The grid rows and columns from each edge whose field values one application ([`CpuPml::begin`] and
+	/// [`XShared::row`]) reads: the rim and the 3 cells of the stencil's taps beyond it. The cells it writes lie within
+	/// the rim.
+	pub fn band(&self) -> usize {
+		self.strips.rim + 3
+	}
+
 	pub fn reset(&mut self) {
 		for b in self.psi.iter_mut().chain(&mut self.xi) {
 			b.fill(0.0);
 		}
 	}
 
-	/// Adds the rim's correction of `field` (times `scale c2`) to `out` and advances memory `set`, on the rim cells
-	/// of `area` only: the top and bottom strips on its rows and columns, the left and right strips on its rows where
-	/// it meets them. `area` must hold every cell within [`REACH`] of a `field` value that is not +0 and every cell
-	/// set `set` was applied on before; the cells outside would compute to the +0 they hold.
-	pub fn apply(&mut self, set: usize, field: &[f32], medium: Medium<'_>, out: &mut [f32], scale: f32, area: &Damage) {
+	/// Starts application `set` of the operator to `field` on `area`: advances psi of y, `delta_y` and xi of y over the
+	/// y strips' rows of `area`, which read only `field`, and returns the rest, psi of x and the correction of row after
+	/// row, which a pass runs on each row it writes ([`XPart`]); None when `area` is empty. `area` must hold every cell
+	/// within [`REACH`] of a `field` value that is not +0 and every cell set `set` was applied on before; the cells
+	/// outside would compute to the +0 they hold.
+	pub fn begin<'a>(
+		&'a mut self,
+		set: usize,
+		field: &'a [f32],
+		medium: Medium<'a>,
+		scale: f32,
+		area: &Damage,
+	) -> Option<XPart<'a>> {
 		if area.is_empty() {
-			return;
+			return None;
 		}
 		self.psi_y(set, field, medium.cuts, area);
 		self.delta_y(set, field, medium.cuts, area);
-		self.psi_x(set, field, medium.cuts, area);
-		self.correct(set, medium, out, scale, area);
+		let (tables, memory) = self.row_wise(set);
+		let (rim, ys, zw) = (tables.strips.rim, area.y.clone(), tables.z_width());
+		let shared = XShared { tables, delta: memory.delta, field, pass: XPass { xs: area.x.clone(), medium, scale } };
+		Some(XPart {
+			shared,
+			psi: &mut memory.psi_x[ys.start * 2 * rim..ys.end * 2 * rim],
+			xi: &mut memory.xi_x[ys.start * 2 * rim..ys.end * 2 * rim],
+			z: &mut memory.z[ys.start * zw..ys.end * zw],
+		})
+	}
+
+	/// Application `set`'s tables and memory variables, for an engine that runs all of its stages row by row: per y-strip
+	/// row [`RimTables::psi_y_line`] then [`RimTables::delta_y_line`], per grid row [`RimTables::x_line`], in an order
+	/// that gives each the inputs [`CpuPml::begin`] and [`XShared::row`] would (engine/cpu, Blocked steps).
+	pub fn row_wise(&mut self, set: usize) -> (RimTables<'_>, RimMemory<'_>) {
+		let Self { strips, stride, x, y, axis, cross, psi, xi, z, zeros } = self;
+		let (x_len, len) = (strips.x_len(), strips.len());
+		let (psi_x, psi_y) = psi[set].split_at_mut(x_len);
+		let (xi_x, rest) = xi[set].split_at_mut(x_len);
+		let (xi_y, delta) = rest.split_at_mut(len - x_len);
+		let tables = RimTables { strips: *strips, stride: *stride, x, y, axis: *axis, cross: *cross, zeros };
+		(tables, RimMemory { psi_y, xi_y, delta, psi_x, xi_x, z })
+	}
+
+	/// Both applications' tables and memory variables at once ([`row_wise`](Self::row_wise)), for an engine that
+	/// interleaves their rows. z~ is filled and read within one call of [`RimTables::x_line`], so the two share it:
+	/// the second's `z` is empty and its rows take the first's.
+	pub fn row_wise_pair(&mut self) -> (RimTables<'_>, [RimMemory<'_>; 2]) {
+		let Self { strips, stride, x, y, axis, cross, psi, xi, z, zeros } = self;
+		let (x_len, len) = (strips.x_len(), strips.len());
+		let tables = RimTables { strips: *strips, stride: *stride, x, y, axis: *axis, cross: *cross, zeros };
+		let [p0, p1] = psi.each_mut();
+		let [x0, x1] = xi.each_mut();
+		let mut z = Some(z.as_mut_slice());
+		let memory = [(p0, x0), (p1, x1)].map(|(psi, xi)| {
+			let (psi_x, psi_y) = psi.split_at_mut(x_len);
+			let (xi_x, rest) = xi.split_at_mut(x_len);
+			let (xi_y, delta) = rest.split_at_mut(len - x_len);
+			RimMemory { psi_y, xi_y, delta, psi_x, xi_x, z: z.take().unwrap_or_default() }
+		});
+		(tables, memory)
 	}
 
 	fn z_width(rim: usize) -> usize {
@@ -325,163 +384,248 @@ impl CpuPml {
 		}
 	}
 
+	/// The y-strip row `r + k` when it lies in the same strip (top or bottom) as y-strip row `r`.
+	fn neighbour_row(rim: usize, r: usize, k: isize) -> Option<usize> {
+		let q = r as isize + k;
+		let (lo, hi) = if r < rim { (0, rim as isize) } else { (rim as isize, 2 * rim as isize) };
+		(q >= lo && q < hi).then_some(q as usize)
+	}
+
 	/// Row `r + k` of `rows` (`width` values each, 2 rim of them) when it lies in the same strip
 	/// (top or bottom, left or right) as `r`, else zeros.
 	fn neighbour<'a>(rows: &'a [f32], zeros: &'a [f32], rim: usize, width: usize, r: usize, k: isize) -> &'a [f32] {
-		let q = r as isize + k;
-		let (lo, hi) = if r < rim { (0, rim as isize) } else { (rim as isize, 2 * rim as isize) };
-		if q >= lo && q < hi { &rows[q as usize * width..][..width] } else { &zeros[..width] }
+		match Self::neighbour_row(rim, r, k) {
+			Some(q) => &rows[q * width..][..width],
+			None => &zeros[..width],
+		}
 	}
 
 	fn psi_y(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
-		let strips = self.strips;
-		let (gw, s, xs) = (strips.gw, self.stride, area.x.clone());
-		let y = &self.y;
-		let rows = self.psi[set][strips.x_len()..].par_chunks_mut(gw).enumerate();
+		let (tables, memory) = self.row_wise(set);
+		let (strips, s, xs) = (tables.strips, tables.stride, &area.x);
+		let rows = memory.psi_y.par_chunks_mut(strips.gw).enumerate();
 		rows.filter(|(r, _)| area.y.contains(&Self::y_row(strips, *r))).for_each(|(r, line)| {
 			let gy = Self::y_row(strips, r);
-			let [b, a, ..] = y[gy];
-			let at = (gy + PAD) * s + PAD;
-			let t = column_rows(field, at, s, gw).map(|row| &row[xs.clone()]);
-			let (cut, line) = (&cuts[at..][xs.clone()], &mut line[xs.clone()]);
-			if any_cut(cut, cut::Y_SHIFT) {
-				psi_y_row::<true>(line, t, cut, b, a);
-			} else {
-				psi_y_row::<false>(line, t, cut, b, a);
-			}
+			tables.psi_y_line(gy, &field[(gy + PAD - 3) * s..][..7 * s], cuts, xs, line);
 		});
 	}
 
 	fn delta_y(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
-		let strips = self.strips;
-		let (gw, s, rim, x_len, len) = (strips.gw, self.stride, strips.rim, strips.x_len(), strips.len());
-		let (y, axis, psi, zeros) = (&self.y, &self.axis, &self.psi[set][x_len..], &self.zeros);
-		let (xi, delta) = self.xi[set][x_len..].split_at_mut(len - x_len);
-		let xs = area.x.clone();
-		let rows = xi.par_chunks_mut(gw).zip(delta.par_chunks_mut(gw)).enumerate();
+		let (tables, memory) = self.row_wise(set);
+		let (strips, s, xs) = (tables.strips, tables.stride, &area.x);
+		let (gw, rim, psi) = (strips.gw, strips.rim, &*memory.psi_y);
+		let rows = memory.xi_y.par_chunks_mut(gw).zip(memory.delta.par_chunks_mut(gw)).enumerate();
 		rows.filter(|(r, _)| area.y.contains(&Self::y_row(strips, *r))).for_each(|(r, (xi, delta))| {
 			let gy = Self::y_row(strips, r);
-			let at = (gy + PAD) * s + PAD;
-			let p = |k: isize| &Self::neighbour(psi, zeros, rim, gw, r, k)[xs.clone()];
-			let row = YRow {
-				t: column_rows(field, at, s, gw).map(|row| &row[xs.clone()]),
-				psi: [p(1), p(-1), p(2), p(-2)],
-				cut: &cuts[at..][xs.clone()],
-			};
-			let (xi, delta) = (&mut xi[xs.clone()], &mut delta[xs.clone()]);
-			if any_cut(row.cut, cut::Y_SHIFT) {
-				delta_y_row::<true>(&row, axis, y[gy], xi, delta);
-			} else {
-				delta_y_row::<false>(&row, axis, y[gy], xi, delta);
-			}
+			let p = |k: isize| Self::neighbour(psi, tables.zeros, rim, gw, r, k);
+			let field = &field[(gy + PAD - 3) * s..][..7 * s];
+			tables.delta_y_line(gy, field, cuts, xs, [p(1), p(-1), p(2), p(-2)], xi, delta);
 		});
 	}
+}
 
-	/// Fills `z~ = u + chi (D3y u + delta_y)` of the x strips' columns and 3 beyond, per grid row of `area` and
-	/// strip it meets, and advances psi of x on it.
-	fn psi_x(&mut self, set: usize, field: &[f32], cuts: &[u8], area: &Damage) {
-		let strips = self.strips;
-		let Strips { gw, rim, .. } = strips;
-		let (s, cross, zw) = (self.stride, self.cross, Self::z_width(rim));
-		let mut psi = std::mem::take(&mut self.psi[set]);
-		let mut z = std::mem::take(&mut self.z);
-		let (x, delta, zeros) = (&self.x, &self.xi[set][strips.len()..], &self.zeros);
-		let (ys, xs, right_start) = (area.y.clone(), area.x.clone(), gw - rim);
-		let psi_rows = &mut psi[ys.start * 2 * rim..ys.end * 2 * rim];
-		psi_rows.par_chunks_mut(2 * rim).zip(z[ys.start * zw..ys.end * zw].par_chunks_mut(zw)).enumerate().for_each(
-			|(k, (row, zrow))| {
-				let gy = ys.start + k;
-				let base = (gy + PAD) * s + PAD;
-				let d = Self::strip_row(strips, gy).map_or(&zeros[..gw], |r| &delta[r * gw..][..gw]);
-				let (left, right) = zrow.split_at_mut(rim + 6);
-				let (pl, pr) = row.split_at_mut(rim);
-				for (span, zs, g0) in [(pl, left, 0), (pr, right, right_start)] {
-					if !meets(&xs, g0, rim) {
-						continue;
-					}
-					z_span(zs, field, base, s, cross, d, g0 as isize - 3);
-					let (cut, x, zs) = (&cuts[base + g0..][..rim], x.span(g0, rim), &*zs);
-					if any_cut(cut, cut::X_SHIFT) {
-						psi_x_span::<true>(span, zs, cut, x);
-					} else {
-						psi_x_span::<false>(span, zs, cut, x);
-					}
-				}
-			},
-		);
-		self.psi[set] = psi;
-		self.z = z;
+/// The tables and sizes every row of one application reads ([`CpuPml::row_wise`]).
+#[derive(Clone, Copy)]
+pub struct RimTables<'a> {
+	strips: Strips,
+	stride: usize,
+	x: &'a Columns,
+	y: &'a [[f32; 4]],
+	axis: [f32; 4],
+	cross: f32,
+	zeros: &'a [f32],
+}
+
+/// The memory variables of one application ([`CpuPml::row_wise`]).
+pub struct RimMemory<'a> {
+	/// psi of y, xi of y and `delta_y`: `gw` values per y-strip row ([`RimTables::strip_row`]).
+	pub psi_y: &'a mut [f32],
+	pub xi_y: &'a mut [f32],
+	pub delta: &'a mut [f32],
+	/// psi and xi of x, `2 rim` values per grid row, and z~, [`RimTables::z_width`] values per grid row.
+	pub psi_x: &'a mut [f32],
+	pub xi_x: &'a mut [f32],
+	pub z: &'a mut [f32],
+}
+
+/// The memory of one grid row for [`RimTables::x_line`]: its psi and xi of x (`2 rim` values) and z~
+/// ([`RimTables::z_width`] values).
+pub struct XLine<'a> {
+	pub psi: &'a mut [f32],
+	pub xi: &'a mut [f32],
+	pub z: &'a mut [f32],
+}
+
+/// What a pass hands the rim's correction of its rows: the columns it runs on, the medium and the correction's scale.
+#[derive(Clone)]
+pub struct XPass<'a> {
+	pub xs: Range<usize>,
+	pub medium: Medium<'a>,
+	pub scale: f32,
+}
+
+impl RimTables<'_> {
+	/// The rim's width.
+	pub fn rim(&self) -> usize {
+		self.strips.rim
 	}
 
-	fn correct(&mut self, set: usize, Medium { cuts, c2 }: Medium<'_>, out: &mut [f32], scale: f32, area: &Damage) {
-		let strips = self.strips;
-		let Strips { gw, rim, .. } = strips;
-		let (s, zw) = (self.stride, Self::z_width(rim));
-		let mut memory = std::mem::take(&mut self.xi[set]);
-		let (xi_x, rest) = memory.split_at_mut(strips.x_len());
-		let delta = &rest[strips.len() - strips.x_len()..];
-		let (pml, psi) = (&*self, &self.psi[set][..strips.x_len()]);
-		let (ys, xs, right_start) = (area.y.clone(), area.x.clone(), gw - rim);
-		let rows = &mut out[(PAD + ys.start) * s..(PAD + ys.end) * s];
-		let sides = [meets(&xs, 0, rim), meets(&xs, right_start, rim)];
+	/// The values of z~ per grid row.
+	pub fn z_width(&self) -> usize {
+		CpuPml::z_width(self.strips.rim)
+	}
+
+	/// The y-strip row of grid row `gy`, if any.
+	pub fn strip_row(&self, gy: usize) -> Option<usize> {
+		CpuPml::strip_row(self.strips, gy)
+	}
+
+	/// The y-strip row `r + k` when it lies in the same strip as y-strip row `r`: the rows of psi of y whose D1
+	/// [`delta_y_line`](Self::delta_y_line) takes, zeros elsewhere.
+	pub fn neighbour_row(&self, r: usize, k: isize) -> Option<usize> {
+		CpuPml::neighbour_row(self.strips.rim, r, k)
+	}
+
+	/// A row of zeros as long as a grid row.
+	pub fn zeros(&self) -> &[f32] {
+		self.zeros
+	}
+
+	pub fn scratch(&self) -> XScratch {
+		XScratch { padded: vec![0.0; self.strips.rim + 4], plain: vec![0.0; self.strips.gw] }
+	}
+
+	/// Advances psi of y of y-strip grid row `gy` (`line`, its `gw` values) on the columns `xs`: `field` holds the 7
+	/// padded rows from 3 above the row to 3 below it, `cuts` the whole grid's cut bytes.
+	pub fn psi_y_line(&self, gy: usize, field: &[f32], cuts: &[u8], xs: &Range<usize>, line: &mut [f32]) {
+		let (gw, s) = (self.strips.gw, self.stride);
+		let [b, a, ..] = self.y[gy];
+		let at = (gy + PAD) * s + PAD;
+		let t = column_rows(field, 3 * s + PAD, s, gw).map(|row| &row[xs.clone()]);
+		let (cut, line) = (&cuts[at..][xs.clone()], &mut line[xs.clone()]);
+		if any_cut(cut, cut::Y_SHIFT) {
+			psi_y_row::<true>(line, t, cut, b, a);
+		} else {
+			psi_y_row::<false>(line, t, cut, b, a);
+		}
+	}
+
+	/// Advances xi of y and sets `delta_y` of y-strip grid row `gy` (`xi`, `delta`, `gw` values each) on the columns
+	/// `xs`: `field` as for [`psi_y_line`](Self::psi_y_line), `psi` psi of y of the strip rows 1 after, 1 before, 2
+	/// after and 2 before it, zeros beyond its strip ([`neighbour_row`](Self::neighbour_row)), each `gw` values.
+	#[allow(clippy::too_many_arguments)]
+	pub fn delta_y_line(
+		&self,
+		gy: usize,
+		field: &[f32],
+		cuts: &[u8],
+		xs: &Range<usize>,
+		psi: [&[f32]; 4],
+		xi: &mut [f32],
+		delta: &mut [f32],
+	) {
+		let (gw, s) = (self.strips.gw, self.stride);
+		let at = (gy + PAD) * s + PAD;
+		let row = YRow {
+			t: column_rows(field, 3 * s + PAD, s, gw).map(|row| &row[xs.clone()]),
+			psi: psi.map(|p| &p[xs.clone()]),
+			cut: &cuts[at..][xs.clone()],
+		};
+		let (xi, delta) = (&mut xi[xs.clone()], &mut delta[xs.clone()]);
+		if any_cut(row.cut, cut::Y_SHIFT) {
+			delta_y_row::<true>(&row, &self.axis, self.y[gy], xi, delta);
+		} else {
+			delta_y_row::<false>(&row, &self.axis, self.y[gy], xi, delta);
+		}
+	}
+
+	/// Fills z~ `= u + chi (D3y u + delta_y)` of the x strips' columns and 3 beyond of grid row `gy` and advances psi
+	/// of x on it, for each strip the pass's columns meet; then adds the correction times `scale c2` to the row's grid
+	/// cells `line` and advances their xi: the x strips' cells, and on a y-strip row the cells of the pass's columns
+	/// between them. `field` holds the 3 padded rows from the one above the row, `strip` the row's `delta_y` on a
+	/// y-strip row, `memory` the row's own.
+	#[cfg_attr(target_arch = "x86_64", inline(always))]
+	#[allow(clippy::too_many_arguments)]
+	pub fn x_line(
+		&self,
+		gy: usize,
+		field: &[f32],
+		strip: Option<&[f32]>,
+		memory: XLine<'_>,
+		line: &mut [f32],
+		scratch: &mut XScratch,
+		pass: &XPass<'_>,
+	) {
+		let Strips { gw, rim, .. } = self.strips;
+		let XPass { xs, medium: Medium { cuts, c2 }, scale } = pass;
+		let (s, scale, XLine { psi, xi: xi_x, z }) = (self.stride, *scale, memory);
+		let (right_start, base, fbase) = (gw - rim, (gy + PAD) * s + PAD, s + PAD);
+		let sides = [meets(xs, 0, rim), meets(xs, right_start, rim)];
+		let (left, right) = z.split_at_mut(rim + 6);
+		let (pl, pr) = psi.split_at_mut(rim);
+		for (on, span, zs, g0) in [(sides[0], pl, left, 0), (sides[1], pr, right, right_start)] {
+			if !on {
+				continue;
+			}
+			let d = strip.unwrap_or(&self.zeros[..gw]);
+			z_span(zs, field, fbase, s, self.cross, d, g0 as isize - 3);
+			let (cut, x, zs) = (&cuts[base + g0..][..rim], self.x.span(g0, rim), &*zs);
+			if any_cut(cut, cut::X_SHIFT) {
+				psi_x_span::<true>(span, zs, cut, x);
+			} else {
+				psi_x_span::<false>(span, zs, cut, x);
+			}
+		}
+		let XScratch { padded, plain } = scratch;
+		let c2 = &c2[base..][..gw];
+		let ((zl, zr), (pl, pr)) = (z.split_at(rim + 6), psi.split_at(rim));
+		let (xl, xr) = xi_x.split_at_mut(rim);
+		let [left, right] = [(0, zl, pl), (right_start, zr, pr)].map(|(g0, z, psi)| XSpan {
+			z,
+			psi,
+			cut: &cuts[base + g0..][..rim],
+			x: self.x.span(g0, rim),
+			c2: &c2[g0..][..rim],
+		});
+		let (line_l, rest) = line.split_at_mut(rim);
+		let (line_mid, line_r) = rest.split_at_mut(right_start - rim);
 		// The columns of `xs` between the x strips, empty when it lies within one.
 		let mid_start = xs.start.max(rim);
 		let mid = mid_start..xs.end.min(right_start).max(mid_start);
-		let xi_rows = &mut xi_x[ys.start * 2 * rim..ys.end * 2 * rim];
-		let zeros = &self.zeros[..rim];
-		rows.par_chunks_mut(s).zip(xi_rows.par_chunks_mut(2 * rim)).enumerate().for_each_init(
-			|| (vec![0.0f32; rim + 4], vec![0.0f32; gw]),
-			|(padded, plain), (k, (line, xi_x))| {
-				let gy = ys.start + k;
-				let base = (gy + PAD) * s + PAD;
-				let (line, c2) = (&mut line[PAD..][..gw], &c2[base..][..gw]);
-				let (zl, zr) = pml.z[gy * zw..][..zw].split_at(rim + 6);
-				let (pl, pr) = psi[gy * 2 * rim..][..2 * rim].split_at(rim);
-				let (xl, xr) = xi_x.split_at_mut(rim);
-				let [left, right] = [(0, zl, pl), (right_start, zr, pr)].map(|(g0, z, psi)| XSpan {
-					z,
-					psi,
-					cut: &cuts[base + g0..][..rim],
-					x: pml.x.span(g0, rim),
-					c2: &c2[g0..][..rim],
-				});
-				let (line_l, rest) = line.split_at_mut(rim);
-				let (line_mid, line_r) = rest.split_at_mut(right_start - rim);
-				match Self::strip_row(strips, gy).map(|r| &delta[r * gw..][..gw]) {
-					Some(d) => {
-						let (lc, rc) = (0..rim, right_start..gw);
-						for (on, cols) in [(sides[0], lc.clone()), (true, mid.clone()), (sides[1], rc.clone())] {
-							if on {
-								plain_cells(d, pml.cross, cols, plain);
-							}
-						}
-						if sides[0] {
-							pml.correct_span(&left, xl, line_l, padded, scale, &plain[lc]);
-						}
-						if sides[1] {
-							pml.correct_span(&right, xr, line_r, padded, scale, &plain[rc]);
-						}
-						let cells = &mut line_mid[mid.start - rim..mid.end - rim];
-						for ((v, &c), &p) in cells.iter_mut().zip(&c2[mid.clone()]).zip(&plain[mid.clone()]) {
-							*v += scale * c * p;
-						}
-					}
-					None => {
-						if sides[0] {
-							pml.correct_span(&left, xl, line_l, padded, scale, zeros);
-						}
-						if sides[1] {
-							pml.correct_span(&right, xr, line_r, padded, scale, zeros);
-						}
+		match strip {
+			Some(d) => {
+				let (lc, rc) = (0..rim, right_start..gw);
+				for (on, cols) in [(sides[0], lc.clone()), (true, mid.clone()), (sides[1], rc.clone())] {
+					if on {
+						plain_cells(d, self.cross, cols, plain);
 					}
 				}
-			},
-		);
-		self.xi[set] = memory;
+				if sides[0] {
+					self.correct_span(&left, xl, line_l, padded, scale, &plain[lc]);
+				}
+				if sides[1] {
+					self.correct_span(&right, xr, line_r, padded, scale, &plain[rc]);
+				}
+				let cells = &mut line_mid[mid.start - rim..mid.end - rim];
+				for ((v, &c), &p) in cells.iter_mut().zip(&c2[mid.clone()]).zip(&plain[mid.clone()]) {
+					*v += scale * c * p;
+				}
+			}
+			None => {
+				let zeros = &self.zeros[..rim];
+				if sides[0] {
+					self.correct_span(&left, xl, line_l, padded, scale, zeros);
+				}
+				if sides[1] {
+					self.correct_span(&right, xr, line_r, padded, scale, zeros);
+				}
+			}
+		}
 	}
 
 	/// Adds `scale c2 (init + O_x z~ - D2x z~)` to the cells `line` of one x strip of a row and advances their
 	/// xi; `padded` holds at least the strip's psi and two zeros each side.
+	#[cfg_attr(target_arch = "x86_64", inline(always))]
 	fn correct_span(
 		&self,
 		span: &XSpan<'_>,
@@ -510,19 +654,87 @@ impl CpuPml {
 		scale: f32,
 		init: &[f32],
 	) {
-		let n = line.len();
-		let z: [&[f32]; 7] = std::array::from_fn(|j| &span.z[j..][..n]);
-		let (cut, [b, a, ik, dik], c2) = (&span.cut[..n], span.x.map(|c| &c[..n]), &span.c2[..n]);
-		let (xi, init) = (&mut xi[..n], &init[..n]);
-		let padded = &mut padded[..n + 4];
-		padded[2..n + 2].copy_from_slice(&span.psi[..n]);
-		let [p0, p1, p3, p4] = [0, 1, 3, 4].map(|j| &padded[j..][..n]);
-		for k in 0..n {
-			let dpsi = (8.0 * (p3[k] - p1[k]) - (p4[k] - p0[k])) / 12.0;
-			let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
-			let sum = init[k] + stretched(&taps, &self.axis, [b[k], a[k], ik[k], dik[k]], dpsi, &mut xi[k]);
-			line[k] += scale * c2[k] * sum;
-		}
+		isa::wide(
+			#[cfg_attr(target_arch = "x86_64", inline(always))]
+			|| {
+				let n = line.len();
+				let z: [&[f32]; 7] = std::array::from_fn(|j| &span.z[j..][..n]);
+				let (cut, [b, a, ik, dik], c2) = (&span.cut[..n], span.x.map(|c| &c[..n]), &span.c2[..n]);
+				let (xi, init) = (&mut xi[..n], &init[..n]);
+				let padded = &mut padded[..n + 4];
+				padded[2..n + 2].copy_from_slice(&span.psi[..n]);
+				let [p0, p1, p3, p4] = [0, 1, 3, 4].map(|j| &padded[j..][..n]);
+				for k in 0..n {
+					let dpsi = (8.0 * (p3[k] - p1[k]) - (p4[k] - p0[k])) / 12.0;
+					let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+					let sum = init[k] + stretched(&taps, &self.axis, [b[k], a[k], ik[k], dik[k]], dpsi, &mut xi[k]);
+					line[k] += scale * c2[k] * sum;
+				}
+			},
+		);
+	}
+}
+
+/// What [`CpuPml::begin`] leaves of an application: psi of x and the correction, row by row. They read the field,
+/// `delta_y` and the row's own memory, so a pass runs them on each row right after writing it ([`XShared::row`]).
+pub struct XPart<'a> {
+	shared: XShared<'a>,
+	/// psi and xi of x of the area's rows, `2 rim` values a row, and their z~.
+	psi: &'a mut [f32],
+	xi: &'a mut [f32],
+	z: &'a mut [f32],
+}
+
+impl<'a> XPart<'a> {
+	/// The state the rows share, and the memory of `rows` grid rows at a time from the area's first row.
+	pub fn chunks(&mut self, rows: usize) -> (&XShared<'a>, impl IndexedParallelIterator<Item = XRows<'_>>) {
+		let (w, zw) = (2 * self.shared.tables.strips.rim, self.shared.tables.z_width());
+		let chunks = self.psi.par_chunks_mut(rows * w).zip(self.xi.par_chunks_mut(rows * w));
+		let chunks =
+			chunks.zip(self.z.par_chunks_mut(rows * zw)).map(move |((psi, xi), z)| XRows { psi, xi, z, w, zw });
+		(&self.shared, chunks)
+	}
+}
+
+/// The memory of a block of rows of an [`XPart`].
+pub struct XRows<'b> {
+	psi: &'b mut [f32],
+	xi: &'b mut [f32],
+	z: &'b mut [f32],
+	w: usize,
+	zw: usize,
+}
+
+/// A thread's scratch rows for [`RimTables::x_line`]: a strip's psi with two zeros each side, and a row of
+/// `delta_y + chi D2x delta_y`.
+pub struct XScratch {
+	padded: Vec<f32>,
+	plain: Vec<f32>,
+}
+
+/// The state every row of an [`XPart`] reads.
+pub struct XShared<'a> {
+	tables: RimTables<'a>,
+	/// `delta_y` of the y strips' rows.
+	delta: &'a [f32],
+	field: &'a [f32],
+	pass: XPass<'a>,
+}
+
+impl XShared<'_> {
+	pub fn scratch(&self) -> XScratch {
+		self.tables.scratch()
+	}
+
+	/// [`RimTables::x_line`] on grid row `gy`, row `j` of `rows`.
+	#[cfg_attr(target_arch = "x86_64", inline(always))]
+	pub fn row(&self, gy: usize, rows: &mut XRows<'_>, j: usize, line: &mut [f32], scratch: &mut XScratch) {
+		let (s, gw, w, zw) = (self.tables.stride, self.tables.strips.gw, rows.w, rows.zw);
+		let strip = self.tables.strip_row(gy).map(|r| &self.delta[r * gw..][..gw]);
+		let memory =
+			XLine { psi: &mut rows.psi[j * w..][..w], xi: &mut rows.xi[j * w..][..w], z: &mut rows.z[j * zw..][..zw] };
+		let field = &self.field[(gy + PAD - 1) * s..][..3 * s];
+		self.tables.x_line(gy, field, strip, memory, line, scratch, &self.pass);
 	}
 }
 
@@ -539,26 +751,31 @@ struct XSpan<'a> {
 /// `delta_y`, 0 beyond the grid. The cells between the grid's edges run on row slices and vectorise; each cell is
 /// the same expression in the same order either way.
 fn plain_cells(d: &[f32], cross: f32, cols: Range<usize>, out: &mut [f32]) {
-	if cross == 0.0 {
-		out[cols.clone()].copy_from_slice(&d[cols]);
-		return;
-	}
-	let gw = d.len();
-	let edge = |gx: usize| {
-		let left = if gx > 0 { d[gx - 1] } else { 0.0 };
-		let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
-		d[gx] + cross * (left + right - 2.0 * d[gx])
-	};
-	let inner_start = cols.start.max(1).min(cols.end);
-	let inner = inner_start..cols.end.min(gw - 1).max(inner_start);
-	for gx in (cols.start..inner.start).chain(inner.end..cols.end) {
-		out[gx] = edge(gx);
-	}
-	let n = inner.len();
-	let (l, c, r) = (&d[inner.start - 1..][..n], &d[inner.clone()], &d[inner.start + 1..][..n]);
-	for (o, ((&l, &c), &r)) in out[inner].iter_mut().zip(l.iter().zip(c).zip(r)) {
-		*o = c + cross * (l + r - 2.0 * c);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			if cross == 0.0 {
+				out[cols.clone()].copy_from_slice(&d[cols]);
+				return;
+			}
+			let gw = d.len();
+			let edge = |gx: usize| {
+				let left = if gx > 0 { d[gx - 1] } else { 0.0 };
+				let right = if gx + 1 < gw { d[gx + 1] } else { 0.0 };
+				d[gx] + cross * (left + right - 2.0 * d[gx])
+			};
+			let inner_start = cols.start.max(1).min(cols.end);
+			let inner = inner_start..cols.end.min(gw - 1).max(inner_start);
+			for gx in (cols.start..inner.start).chain(inner.end..cols.end) {
+				out[gx] = edge(gx);
+			}
+			let n = inner.len();
+			let (l, c, r) = (&d[inner.start - 1..][..n], &d[inner.clone()], &d[inner.start + 1..][..n]);
+			for (o, ((&l, &c), &r)) in out[inner].iter_mut().zip(l.iter().zip(c).zip(r)) {
+				*o = c + cross * (l + r - 2.0 * c);
+			}
+		},
+	);
 }
 
 /// One row of the y strips: the field's seven rows around it, psi of the rows 1 and 2 after and before
@@ -582,66 +799,86 @@ fn maybe_cut<const CUT: bool>(t: [f32; 7], bits: u8) -> [f32; 7] {
 
 #[inline(always)]
 fn psi_y_row<const CUT: bool>(line: &mut [f32], t: [&[f32]; 7], cut: &[u8], b: f32, a: f32) {
-	let gw = line.len();
-	let (t, cut) = (t.map(|row| &row[..gw]), &cut[..gw]);
-	for x in 0..gw {
-		let taps = maybe_cut::<CUT>(t.map(|row| row[x]), cut[x] >> cut::Y_SHIFT);
-		line[x] = b * line[x] + a * first(&taps);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let gw = line.len();
+			let (t, cut) = (t.map(|row| &row[..gw]), &cut[..gw]);
+			for x in 0..gw {
+				let taps = maybe_cut::<CUT>(t.map(|row| row[x]), cut[x] >> cut::Y_SHIFT);
+				line[x] = b * line[x] + a * first(&taps);
+			}
+		},
+	);
 }
 
 #[inline(always)]
 fn delta_y_row<const CUT: bool>(row: &YRow<'_>, axis: &[f32; 4], coef: [f32; 4], xi: &mut [f32], delta: &mut [f32]) {
-	let gw = xi.len();
-	let (t, [p1, m1, p2, m2]) = (row.t.map(|r| &r[..gw]), row.psi.map(|r| &r[..gw]));
-	let (cut, delta) = (&row.cut[..gw], &mut delta[..gw]);
-	for x in 0..gw {
-		let taps = maybe_cut::<CUT>(t.map(|r| r[x]), cut[x] >> cut::Y_SHIFT);
-		let dpsi = (8.0 * (p1[x] - m1[x]) - (p2[x] - m2[x])) / 12.0;
-		delta[x] = stretched(&taps, axis, coef, dpsi, &mut xi[x]);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let gw = xi.len();
+			let (t, [p1, m1, p2, m2]) = (row.t.map(|r| &r[..gw]), row.psi.map(|r| &r[..gw]));
+			let (cut, delta) = (&row.cut[..gw], &mut delta[..gw]);
+			for x in 0..gw {
+				let taps = maybe_cut::<CUT>(t.map(|r| r[x]), cut[x] >> cut::Y_SHIFT);
+				let dpsi = (8.0 * (p1[x] - m1[x]) - (p2[x] - m2[x])) / 12.0;
+				delta[x] = stretched(&taps, axis, coef, dpsi, &mut xi[x]);
+			}
+		},
+	);
 }
 
 /// z~ of the `out.len()` cells from grid column `g0` of the row whose grid cells start at padded index `base`;
 /// `d` is the row's `delta_y` (zeros outside the y strips), 0 beyond the grid.
 fn z_span(out: &mut [f32], field: &[f32], base: usize, s: usize, cross: f32, d: &[f32], g0: isize) {
-	let (n, gw) = (out.len(), d.len());
-	let j0 = base.wrapping_add_signed(g0);
-	let f = &field[j0..][..n];
-	if cross == 0.0 {
-		out.copy_from_slice(f);
-		return;
-	}
-	let (up, down) = (&field[j0 - s..][..n], &field[j0 + s..][..n]);
-	let cell = |k: usize, dk: f32| {
-		let v = f[k];
-		v + cross * ((up[k] + down[k] - 2.0 * v) + dk)
-	};
-	// The cells within the grid, `lo..hi`, take `d` on row slices, so that loop vectorises; the at most 3 beyond each
-	// side take 0.
-	let lo = (-g0).clamp(0, n as isize) as usize;
-	let hi = (gw as isize - g0).clamp(lo as isize, n as isize) as usize;
-	for k in (0..lo).chain(hi..n) {
-		out[k] = cell(k, 0.0);
-	}
-	let d = &d[(g0 + lo as isize) as usize..][..hi - lo];
-	let (f, up, down) = (&f[lo..hi], &up[lo..hi], &down[lo..hi]);
-	for (o, (((&v, &u), &w), &dk)) in out[lo..hi].iter_mut().zip(f.iter().zip(up).zip(down).zip(d)) {
-		*o = v + cross * ((u + w - 2.0 * v) + dk);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let (n, gw) = (out.len(), d.len());
+			let j0 = base.wrapping_add_signed(g0);
+			let f = &field[j0..][..n];
+			if cross == 0.0 {
+				out.copy_from_slice(f);
+				return;
+			}
+			let (up, down) = (&field[j0 - s..][..n], &field[j0 + s..][..n]);
+			let cell = |k: usize, dk: f32| {
+				let v = f[k];
+				v + cross * ((up[k] + down[k] - 2.0 * v) + dk)
+			};
+			// The cells within the grid, `lo..hi`, take `d` on row slices, so that loop vectorises; the at most 3
+			// beyond each side take 0.
+			let lo = (-g0).clamp(0, n as isize) as usize;
+			let hi = (gw as isize - g0).clamp(lo as isize, n as isize) as usize;
+			for k in (0..lo).chain(hi..n) {
+				out[k] = cell(k, 0.0);
+			}
+			let d = &d[(g0 + lo as isize) as usize..][..hi - lo];
+			let (f, up, down) = (&f[lo..hi], &up[lo..hi], &down[lo..hi]);
+			for (o, (((&v, &u), &w), &dk)) in out[lo..hi].iter_mut().zip(f.iter().zip(up).zip(down).zip(d)) {
+				*o = v + cross * ((u + w - 2.0 * v) + dk);
+			}
+		},
+	);
 }
 
 /// Advances psi of x of one strip's cells on row slices: the taps of `z` (z~ from 3 before the first cell) are shifted
 /// slices and `x` the coefficient columns, so the loop vectorises without mirrors.
 #[inline(always)]
 fn psi_x_span<const CUT: bool>(psi: &mut [f32], z: &[f32], cut: &[u8], x: [&[f32]; 4]) {
-	let n = psi.len();
-	let z: [&[f32]; 7] = std::array::from_fn(|j| &z[j..][..n]);
-	let (cut, [b, a, ..]) = (&cut[..n], x.map(|c| &c[..n]));
-	for k in 0..n {
-		let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
-		psi[k] = b[k] * psi[k] + a[k] * first(&taps);
-	}
+	isa::wide(
+		#[cfg_attr(target_arch = "x86_64", inline(always))]
+		|| {
+			let n = psi.len();
+			let z: [&[f32]; 7] = std::array::from_fn(|j| &z[j..][..n]);
+			let (cut, [b, a, ..]) = (&cut[..n], x.map(|c| &c[..n]));
+			for k in 0..n {
+				let taps = maybe_cut::<CUT>(z.map(|r| r[k]), cut[k] >> cut::X_SHIFT);
+				psi[k] = b[k] * psi[k] + a[k] * first(&taps);
+			}
+		},
+	);
 }
 
 /// `u_x~x~ - D2 u` at one cell from its taps, the axis's coefficients `[b, a, 1/kappa, (1/kappa)']`,

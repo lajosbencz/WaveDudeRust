@@ -1,25 +1,30 @@
 //! The app state driven as the views will drive it, on the scripted backend and a fake clock.
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use waveduderust::model::ProbeDetector;
 use waveduderust::model::{ItemKind, ItemRef, Point, SourceEdit};
 use waveduderust::run::Wanted;
+use waveduderust::unstable::engine::EngineChoice;
+use waveduderust::unstable::engine::cpu::Backend as CpuBackend;
 use waveduderust_app::clipboard::PasteTarget;
 use waveduderust_app::commands::{Command, Edit, NewPart};
 use waveduderust_app::document::{Source, Target};
 use waveduderust_app::history::{History, QUIET};
+use waveduderust_app::live::SharedEngine;
 use waveduderust_app::live::fake::FakeBackend;
 use waveduderust_app::platform::Store;
 use waveduderust_app::selection::Row;
-use waveduderust_app::settings::Settings;
+use waveduderust_app::settings::{Engine, Settings};
 use waveduderust_app::{AppState, Event, ExportKind, Guarded, Response, SaveChoice};
 
 fn app() -> AppState<FakeBackend> {
-	let mut s =
-		AppState::with_backend(Settings::default(), None, FakeBackend::default(), Arc::new(AtomicBool::new(false)));
+	let mut s = AppState::with_backend(
+		Settings::default(),
+		None,
+		FakeBackend::default(),
+		SharedEngine::new(EngineChoice::cpu()),
+	);
 	let t = Instant::now();
 	s.document.project.scene.width = 64;
 	s.document.project.scene.height = 48;
@@ -331,9 +336,10 @@ fn core_backend_round(use_gpu: bool) {
 	use waveduderust::run::RunState;
 	use waveduderust_app::live::CoreBackend;
 	let dir = tempfile::tempdir().unwrap();
-	let gpu = Arc::new(AtomicBool::new(use_gpu));
-	let backend = CoreBackend::new(gpu.clone(), dir.path().to_path_buf(), waveduderust::run::Memory::System).unwrap();
-	let mut s = AppState::with_backend(Settings::default(), None, backend, gpu);
+	let engine = SharedEngine::new(EngineChoice::prefer_gpu(use_gpu));
+	let backend =
+		CoreBackend::new(engine.clone(), dir.path().to_path_buf(), waveduderust::run::Memory::System).unwrap();
+	let mut s = AppState::with_backend(Settings::default(), None, backend, engine);
 	let t = Instant::now();
 	s.document.project.scene.width = 96;
 	s.document.project.scene.height = 72;
@@ -377,14 +383,21 @@ fn core_backend_round(use_gpu: bool) {
 }
 
 #[test]
-fn a_device_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
+fn an_engine_switch_rebuilds_the_engine_and_the_same_quality_is_no_edit() {
 	let mut s = app();
 	let t = Instant::now();
-	let on = s.settings.use_gpu;
-	s.handle(Event::SetUseGpu(!on), t);
-	assert_eq!(s.live.backend().engine_changes, 1);
-	s.handle(Event::SetUseGpu(!on), t);
-	assert_eq!(s.live.backend().engine_changes, 1, "the same device again changes nothing");
+	let generic = EngineChoice::Cpu(CpuBackend::Generic);
+	let other = if s.settings.engine.choice() == generic { EngineChoice::best() } else { generic };
+	s.handle(Event::SetEngine(other), t);
+	assert_eq!((s.live.backend().engine_changes, s.settings.engine), (1, Engine::of(other)));
+	s.handle(Event::SetEngine(other), t);
+	assert_eq!(s.live.backend().engine_changes, 1, "the same engine again changes nothing");
+	s.settings.engine = Engine::CpuSimd128;
+	if Engine::CpuSimd128.choice() == EngineChoice::best() {
+		s.handle(Event::SetEngine(EngineChoice::best()), t);
+		assert_eq!(s.live.backend().engine_changes, 1, "an engine missing here runs as the best, which is no change");
+		assert_eq!(s.settings.engine, Engine::of(EngineChoice::best()));
+	}
 	let revision = s.live.backend().goal().revision;
 	s.handle(Event::SetPreviewQuality(s.settings.preview_quality()), t);
 	assert_eq!(s.live.backend().goal().revision, revision, "the quality in force is no edit");

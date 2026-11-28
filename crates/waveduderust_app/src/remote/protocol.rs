@@ -9,24 +9,25 @@ use waveduderust::unstable::engine::probes::ProbeTrace;
 use waveduderust::unstable::spec::RunSpecError;
 
 use crate::live::EngineLabel;
+use crate::settings::Engine;
 
 /// The version of [`ToWorker`] and [`ToPage`], bumped when either changes; a page and a worker of different
 /// versions do not talk.
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 
 /// From the page to the run worker.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ToWorker {
-	/// The first message: the page's [`VERSION`], its [`build_id`](crate::build_id) and whether the engines run on
-	/// the GPU. Stays the first variant, its version first.
-	Init { version: u32, build: String, use_gpu: bool },
+	/// The first message: the page's [`VERSION`], its [`build_id`](crate::build_id) and the engine the runs build
+	/// ([`Engine::choice`]). Stays the first variant, its version first.
+	Init { version: u32, build: String, engine: Engine },
 	/// The scene image of key `key` (`image_key`), its bytes the buffer; posted before the first goal naming it.
 	Image { key: u64 },
 	/// The goal, its project without the image bytes; `image` is the key of the image to put back. Its RAM cache
 	/// size is the page's mirror's: the worker keeps no frame.
 	Goal { goal: Goal, image: Option<u64> },
-	/// The engine is built anew, on the GPU when `use_gpu`.
-	Rebuild { use_gpu: bool },
+	/// The engine is built anew, the one `engine` names.
+	Rebuild { engine: Engine },
 	/// The frames go for a new store (`RunWorker::discard_frames`).
 	Discard,
 	/// The page holds frame `frame` of `generation` of store `store`, or why it could not keep it.
