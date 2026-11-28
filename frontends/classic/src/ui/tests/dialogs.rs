@@ -1,6 +1,6 @@
 //! The modals driven headless: the unsaved-edits question with its buttons and keys, the message window of a failed
 //! open, the crash report an earlier session left, the modals waiting in turn and the window's keys waiting behind
-//! them, the scene image question, the welcome page and About.
+//! them, the scene image question, the welcome page, About and the engine drop-down of Settings.
 
 use super::common;
 
@@ -251,4 +251,35 @@ fn about_copies_the_system_lines_toggles_the_license_and_closes_on_esc() {
 	harness.key_press(Key::Escape);
 	settle(&mut harness);
 	assert!(harness.query_by_label("Hide the license text").is_none(), "Esc left About open");
+}
+
+#[test]
+fn the_engine_drop_down_lists_the_engines_offered_here_and_picks_one() {
+	use waveduderust::unstable::engine::EngineChoice;
+	use waveduderust_app::settings::Engine;
+	let dir = tempfile::tempdir().unwrap();
+	let mut harness = window(dir.path(), None, &[]);
+	menu(&mut harness, "File", "Settings...");
+	harness.event(egui::Event::Text("engine".into()));
+	settle(&mut harness);
+	harness.get_by_role_and_label(egui::Role::ComboBox, "Engine (GPU or CPU)").click();
+	settle(&mut harness);
+	let s = &harness.state().app().strings;
+	let (choices, now) = (EngineChoice::available(), harness.state().app().settings.engine.choice());
+	let words: Vec<String> = choices.iter().map(|&c| Engine::of(c).text(s)).collect();
+	for word in &words {
+		assert!(harness.query_all_by_label(word).next().is_some(), "{word} is not offered");
+	}
+	let lacking = [Engine::Gpu, Engine::CpuAvx2, Engine::CpuGeneric, Engine::CpuSimd128]
+		.into_iter()
+		.filter(|&e| Engine::of(e.choice()) != e);
+	for engine in lacking {
+		assert!(harness.query_by_label(&engine.text(s)).is_none(), "{engine:?} is offered but missing here");
+	}
+	let Some(i) = choices.iter().position(|&c| c != now) else {
+		return;
+	};
+	harness.get_by_label(&words[i]).click();
+	settle(&mut harness);
+	assert_eq!(harness.state().app().settings.engine, Engine::of(choices[i]), "the pick is not the setting");
 }

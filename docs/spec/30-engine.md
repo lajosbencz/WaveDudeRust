@@ -124,7 +124,9 @@ generic backend's results are the same on every target bit for bit, and the simd
 The avx2 backend's are within rounding of them, 1e-4 of the peak, not bit for bit
 ([docs/measurements.md](../measurements.md#the-cpu-engine-against-masters)). Natively
 `WAVEDUDE_CPU_BACKEND=<name>` (`generic`, `avx2`) asks for a backend; one this build or this CPU lacks is logged and
-the best runs instead. The engine's label names its backend, e.g. "CPU (avx2), 8 threads".
+the best runs instead. The app's runs take the backend of its Engine setting instead ([ui/80](../ui/80-settings.md)), the
+CPU engine the GPU's falls back to the environment's; `engine::EngineChoice::available` lists the GPU (with the `gpu`
+feature) and the backends this CPU runs, best first. The engine's label names its backend, e.g. "CPU (avx2), 8 threads".
 
 ## Sources
 

@@ -205,18 +205,19 @@ mod tests {
 
 	use super::protocol::{ToPage, ToWorker};
 	use super::*;
+	use crate::settings::Engine;
 
 	#[test]
 	fn a_held_goal_or_rebuild_replaces_the_one_before_and_the_rest_keep_their_order() {
 		let goal = |revision| ToWorker::Goal { goal: Goal { revision, ..Goal::default() }, image: None };
 		let messages = [
-			ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), use_gpu: true },
+			ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), engine: Engine::Gpu },
 			goal(1),
-			ToWorker::Rebuild { use_gpu: false },
+			ToWorker::Rebuild { engine: Engine::CpuGeneric },
 			ToWorker::Image { key: 7 },
 			goal(2),
 			ToWorker::Discard,
-			ToWorker::Rebuild { use_gpu: true },
+			ToWorker::Rebuild { engine: Engine::Gpu },
 		];
 		let mut held = Vec::new();
 		for message in &messages {
@@ -232,10 +233,21 @@ mod tests {
 
 	#[test]
 	fn a_first_message_names_its_version_and_no_other_does() {
-		let init = ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), use_gpu: true };
+		let init = ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), engine: Engine::Gpu };
 		assert_eq!(version_of(&envelope(&init, None)), Some(protocol::VERSION));
 		let ready = ToPage::Ready { version: 7, build: crate::build_id(), gpu: Err("none".into()) };
 		assert_eq!(version_of(&envelope(&ready, None)), Some(7));
 		assert_eq!(version_of(&envelope(&ToWorker::Discard, None)), None);
+	}
+
+	#[test]
+	fn the_engine_travels_by_its_setting() {
+		for engine in [Engine::Gpu, Engine::CpuAvx2, Engine::CpuGeneric, Engine::CpuSimd128] {
+			let init = ToWorker::Init { version: protocol::VERSION, build: crate::build_id(), engine };
+			for message in [init, ToWorker::Rebuild { engine }] {
+				let back = decode::<ToWorker>(&envelope(&message, None)).unwrap();
+				assert_eq!(format!("{back:?}"), format!("{message:?}"));
+			}
+		}
 	}
 }

@@ -980,7 +980,10 @@ fn drag_burst(wanted: Wanted, part: bool) {
 	};
 	let dir = tempfile::tempdir().unwrap();
 	let w = RunWorker::new(
-		Box::new(|scene, options| waveduderust::unstable::engine::build(scene, options, true).engine),
+		Box::new(|scene, options| {
+			waveduderust::unstable::engine::build(scene, options, waveduderust::unstable::engine::EngineChoice::Gpu)
+				.engine
+		}),
 		dir.path().to_path_buf(),
 		Arc::default(),
 	)
@@ -1122,7 +1125,12 @@ mod ignored_timing {
 		};
 		let mut cache = SceneCache::default();
 		let first = cache.spec(&project, quality, (&view).into(), view.intensity.preview).unwrap();
-		let mut engine = waveduderust::unstable::engine::build(first.scene.clone(), first.options.clone(), true).engine;
+		let mut engine = waveduderust::unstable::engine::build(
+			first.scene.clone(),
+			first.options.clone(),
+			waveduderust::unstable::engine::EngineChoice::Gpu,
+		)
+		.engine;
 		engine.set_emitters(&first.emitters);
 		let mut times = [0f64; 3];
 		let rounds = 10;

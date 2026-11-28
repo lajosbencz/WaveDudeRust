@@ -10,9 +10,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
@@ -24,15 +21,14 @@ use waveduderust::run::{
 	FitFrame, FitRequest, FrameStore, Goal, Levers, MemoryWarning, RamCache, RunError, RunState, Status, Wanted,
 	WorkState,
 };
-use waveduderust::unstable::engine::Snapshot;
 use waveduderust::unstable::engine::gpu::DeviceFrames;
 use waveduderust::unstable::engine::probes::ProbeTrace;
+use waveduderust::unstable::engine::{EngineChoice, Snapshot};
 #[cfg(not(target_arch = "wasm32"))]
 use waveduderust::unstable::engine::{EngineOptions, SceneData, WaveEngine};
 use waveduderust::unstable::export::ExportFormat;
 use waveduderust::unstable::scene::off_canvas::{OffCanvas, off_canvas};
 use waveduderust::unstable::spec::{RunRequest, RunSpecError, SceneCache};
-#[cfg(not(target_arch = "wasm32"))]
 use waveduderust::unstable::sync::lock;
 
 use super::commands::ChangeKind;
@@ -1112,10 +1108,28 @@ impl<B: Backend> LiveController<B> {
 	}
 }
 
-/// The core's live run on the CPU or GPU engine, by the Use the GPU setting: on a thread of its own natively.
+/// The engine the live runs build, shared between the settings and the backend, which reads it at each build.
+#[derive(Clone, Debug)]
+pub struct SharedEngine(Arc<Mutex<EngineChoice>>);
+
+impl SharedEngine {
+	pub fn new(choice: EngineChoice) -> Self {
+		Self(Arc::new(Mutex::new(choice)))
+	}
+
+	pub fn get(&self) -> EngineChoice {
+		*lock(&self.0)
+	}
+
+	pub fn set(&self, choice: EngineChoice) {
+		*lock(&self.0) = choice;
+	}
+}
+
+/// The core's live run on the engine of the Engine setting: on a thread of its own natively.
 #[cfg(not(target_arch = "wasm32"))]
 pub struct CoreBackend {
-	use_gpu: Arc<AtomicBool>,
+	engine: SharedEngine,
 	worker: RunWorker,
 	scene: Arc<Mutex<SceneCache>>,
 	/// Where the budgets' memory readings come from.
@@ -1124,7 +1138,7 @@ pub struct CoreBackend {
 	built: Arc<Mutex<Option<EngineLabel>>>,
 }
 
-/// The core's live run in the browser's run worker ([`crate::remote`]), on its GPU by the Use the GPU setting.
+/// The core's live run in the browser's run worker ([`crate::remote`]), on the engine of the Engine setting.
 #[cfg(target_arch = "wasm32")]
 pub struct CoreBackend {
 	remote: Remote<PagePort>,
@@ -1249,25 +1263,25 @@ fn gpu_name() -> Option<String> {
 	waveduderust::unstable::engine::gpu::context().ok().map(|ctx| ctx.info.name.clone())
 }
 
-/// Builds the engine for a scene: the GPU's when asked for and available (a fallback to the CPU is logged).
+/// Builds the engine `choice` names for a scene; for the GPU's, the CPU's when there is no GPU (logged).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, use_gpu: bool) -> Box<dyn WaveEngine> {
-	let e = waveduderust::unstable::engine::build(scene, options, use_gpu).engine;
+pub fn build_engine(scene: Arc<SceneData>, options: EngineOptions, choice: EngineChoice) -> Box<dyn WaveEngine> {
+	let e = waveduderust::unstable::engine::build(scene, options, choice).engine;
 	super::log::engine_built(e.name(), e.scene(), e.options(), e.sub_steps());
 	e
 }
 
 impl CoreBackend {
 	/// A backend with its spill files in `cache_dir` and its budgets on `memory`'s readings; the engine follows
-	/// `use_gpu`, shared with the settings.
+	/// `engine`, shared with the settings.
 	#[cfg(not(target_arch = "wasm32"))]
-	pub fn new(use_gpu: Arc<AtomicBool>, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
-		let (gpu, built) = (use_gpu.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
+	pub fn new(engine: SharedEngine, cache_dir: PathBuf, memory: Memory) -> std::io::Result<Self> {
+		let (choice, built) = (engine.clone(), Arc::<Mutex<Option<EngineLabel>>>::default());
 		let label = built.clone();
 		let scene: Arc<Mutex<SceneCache>> = Arc::default();
 		let worker = RunWorker::with_memory(
 			Box::new(move |scene, options| {
-				let e = build_engine(scene, options, gpu.load(Ordering::Relaxed));
+				let e = build_engine(scene, options, choice.get());
 				*lock(&label) = Some(EngineLabel::built(gpu_name().filter(|_| e.is_gpu()).as_deref(), e.name()));
 				e
 			}),
@@ -1276,17 +1290,17 @@ impl CoreBackend {
 			memory,
 		)?;
 		worker.set_notify(Box::new(crate::wake::wake));
-		Ok(Self { use_gpu, worker, scene, memory, built })
+		Ok(Self { engine, worker, scene, memory, built })
 	}
 
 	/// A backend on the run worker, which it starts; the mirror stores hold their frames in memory, the RAM cache
 	/// size or at Auto [`detected_web_frame_memory`], and the rest in the origin private file system. The engine
-	/// runs on the worker's GPU while `use_gpu` holds, else on the CPU.
+	/// is the one `engine` names, shared with the settings.
 	#[cfg(target_arch = "wasm32")]
-	pub fn new(use_gpu: Arc<AtomicBool>) -> Self {
+	pub fn new(engine: SharedEngine) -> Self {
 		let frame_memory = detected_web_frame_memory();
 		let port = PagePort::start(&run_worker_url(), crate::wake::wake);
-		let remote = Remote::new(port, use_gpu, frame_memory, Box::new(super::platform::Opfs::start()));
+		let remote = Remote::new(port, engine, frame_memory, Box::new(super::platform::Opfs::start()));
 		Self { remote, scene: Arc::default() }
 	}
 
@@ -1334,7 +1348,7 @@ impl Backend for CoreBackend {
 		if let Some(label) = &*lock(&self.built) {
 			return label.clone();
 		}
-		EngineLabel::of(gpu_name().filter(|_| self.use_gpu.load(Ordering::Relaxed)).as_deref())
+		EngineLabel::of(gpu_name().filter(|_| self.engine.get() == EngineChoice::Gpu).as_deref())
 	}
 }
 

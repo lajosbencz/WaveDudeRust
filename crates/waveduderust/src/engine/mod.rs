@@ -153,22 +153,76 @@ pub struct Built {
 	pub fallback: Option<Fallback>,
 }
 
-/// The CPU engine in place of the GPU's, the fallback logged.
+/// Which engine a build makes: the GPU's (the CPU's in its place when there is no GPU, logged) or the CPU's on a
+/// backend.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EngineChoice {
+	Gpu,
+	Cpu(cpu::Backend),
+}
+
+impl EngineChoice {
+	/// The choices this build offers on this machine, in display order: the GPU's when the `gpu` feature is built
+	/// in, then each CPU backend this CPU runs, best first ([`cpu::Backend::ALL`]). Never empty.
+	pub fn available() -> Vec<Self> {
+		let gpu = cfg!(feature = "gpu").then_some(Self::Gpu);
+		gpu.into_iter().chain(cpu::Backend::ALL.iter().copied().filter(|b| b.available()).map(Self::Cpu)).collect()
+	}
+
+	/// The first of [`available`](Self::available): the GPU's when built in, else the best CPU backend.
+	pub fn best() -> Self {
+		if cfg!(feature = "gpu") { Self::Gpu } else { Self::Cpu(cpu::Backend::best()) }
+	}
+
+	/// Whether [`available`](Self::available) lists the choice.
+	pub fn is_available(self) -> bool {
+		match self {
+			Self::Gpu => cfg!(feature = "gpu"),
+			Self::Cpu(backend) => backend.available(),
+		}
+	}
+
+	/// The CPU engine on the default backend: natively the one `WAVEDUDE_CPU_BACKEND` names, else the best.
+	pub fn cpu() -> Self {
+		Self::Cpu(cpu_backend())
+	}
+
+	/// The GPU's when `gpu`, else [`cpu`](Self::cpu).
+	pub fn prefer_gpu(gpu: bool) -> Self {
+		if gpu { Self::Gpu } else { Self::cpu() }
+	}
+
+	/// The backend of the CPU engine this choice builds, the GPU's fallback included: its own when it runs here,
+	/// else the best, logged; for the GPU the default ([`cpu`](Self::cpu)).
+	pub fn cpu_backend(self) -> cpu::Backend {
+		match self {
+			Self::Gpu => cpu_backend(),
+			Self::Cpu(backend) if backend.available() => backend,
+			Self::Cpu(backend) => {
+				let best = cpu::Backend::best();
+				tracing::warn!("the {} CPU backend does not run here; the {} one runs", backend.name(), best.name());
+				best
+			}
+		}
+	}
+}
+
+/// The CPU engine in place of the GPU's on `backend`, the fallback logged.
 #[cfg(any(feature = "gpu", not(target_arch = "wasm32")))]
-fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, why: Fallback) -> Built {
+fn cpu_instead(scene: Arc<SceneData>, options: EngineOptions, backend: cpu::Backend, why: Fallback) -> Built {
 	tracing::warn!("the GPU engine is not available ({why}); the CPU engine runs instead");
-	Built { engine: cpu_engine(scene, options), fallback: Some(why) }
+	Built { engine: cpu_engine(scene, options, backend), fallback: Some(why) }
 }
 
-/// The CPU engine ([`cpu::CpuEngine`]) on the backend [`cpu_backend`] chooses.
-pub(crate) fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions) -> Box<dyn WaveEngine> {
-	Box::new(cpu::CpuEngine::with_backend(scene, options, cpu_backend()))
+/// The CPU engine ([`cpu::CpuEngine`]) on `backend`, which runs here.
+pub(crate) fn cpu_engine(scene: Arc<SceneData>, options: EngineOptions, backend: cpu::Backend) -> Box<dyn WaveEngine> {
+	Box::new(cpu::CpuEngine::with_backend(scene, options, backend))
 }
 
-/// The backend of the CPU engines built: the best one this CPU runs ([`cpu::Backend::best`]: avx2 on x86-64 with AVX2
-/// and FMA, simd128 in wasm built with it, else generic), or natively the one `WAVEDUDE_CPU_BACKEND` names
+/// The default backend of the CPU engines built: the best one this CPU runs ([`cpu::Backend::best`]: avx2 on x86-64
+/// with AVX2 and FMA, simd128 in wasm built with it, else generic), or natively the one `WAVEDUDE_CPU_BACKEND` names
 /// ([`backend_choice`]), read once.
-fn cpu_backend() -> cpu::Backend {
+pub(crate) fn cpu_backend() -> cpu::Backend {
 	#[cfg(not(target_arch = "wasm32"))]
 	{
 		static CHOICE: std::sync::OnceLock<cpu::Backend> = std::sync::OnceLock::new();
@@ -197,38 +251,45 @@ fn backend_choice(value: Option<&str>) -> cpu::Backend {
 	}
 }
 
-/// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's.
-pub async fn build_on(scene: Arc<SceneData>, options: EngineOptions, gpu: Option<GpuHandle>) -> Built {
+/// The engine for `scene`: the GPU's on `gpu` when given and it builds, else the CPU's on `backend` (one
+/// [`EngineChoice::cpu_backend`] gives).
+pub async fn build_on(
+	scene: Arc<SceneData>,
+	options: EngineOptions,
+	gpu: Option<GpuHandle>,
+	backend: cpu::Backend,
+) -> Built {
 	#[cfg(feature = "gpu")]
 	if let Some(ctx) = gpu {
 		return match gpu::GpuEngine::create(ctx, scene.clone(), options.clone()).await {
 			Ok(e) => Built { engine: Box::new(e), fallback: None },
-			Err(e) => cpu_instead(scene, options, e.into()),
+			Err(e) => cpu_instead(scene, options, backend, e.into()),
 		};
 	}
 	#[cfg(not(feature = "gpu"))]
 	if let Some(never) = gpu {
 		match never {}
 	}
-	Built { engine: cpu_engine(scene, options), fallback: None }
+	Built { engine: cpu_engine(scene, options, backend), fallback: None }
 }
 
-/// The engine for `scene`, blocking: the GPU's when `prefer_gpu` and one is available, else the CPU's.
+/// The engine `choice` names for `scene`, blocking; for the GPU's, the CPU's in its place when no GPU is available.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build(scene: Arc<SceneData>, options: EngineOptions, prefer_gpu: bool) -> Built {
-	if !prefer_gpu {
-		return Built { engine: cpu_engine(scene, options), fallback: None };
+pub fn build(scene: Arc<SceneData>, options: EngineOptions, choice: EngineChoice) -> Built {
+	let backend = choice.cpu_backend();
+	if choice != EngineChoice::Gpu {
+		return Built { engine: cpu_engine(scene, options, backend), fallback: None };
 	}
 	#[cfg(feature = "gpu")]
 	{
 		match gpu::context() {
-			Ok(context) => pollster::block_on(build_on(scene, options, Some(context))),
-			Err(e) => cpu_instead(scene, options, e.into()),
+			Ok(context) => pollster::block_on(build_on(scene, options, Some(context), backend)),
+			Err(e) => cpu_instead(scene, options, backend, e.into()),
 		}
 	}
 	#[cfg(not(feature = "gpu"))]
 	{
-		cpu_instead(scene, options, Fallback::NotBuiltIn)
+		cpu_instead(scene, options, backend, Fallback::NotBuiltIn)
 	}
 }
 
@@ -246,8 +307,8 @@ pub fn gpu_adapter() -> Option<Result<String, String>> {
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-	use super::backend_choice;
 	use super::cpu::Backend;
+	use super::{EngineChoice, backend_choice};
 
 	#[test]
 	fn the_cpu_backend_follows_the_environment() {
@@ -269,5 +330,23 @@ mod tests {
 		for &b in Backend::ALL {
 			assert_eq!(Backend::named(b.name()), Some(b));
 		}
+	}
+
+	#[test]
+	fn the_choices_are_the_gpu_when_built_in_then_the_cpu_backends_that_run() {
+		let choices = EngineChoice::available();
+		assert_eq!(choices.first() == Some(&EngineChoice::Gpu), cfg!(feature = "gpu"));
+		assert_eq!(choices[0], EngineChoice::best());
+		assert_eq!(choices.last(), Some(&EngineChoice::Cpu(Backend::Generic)), "generic is always there");
+		let cpus: Vec<_> = Backend::ALL.iter().copied().filter(|b| b.available()).map(EngineChoice::Cpu).collect();
+		assert_eq!(choices[usize::from(cfg!(feature = "gpu"))..], cpus[..], "best first");
+		assert!(choices.iter().all(|c| c.is_available()));
+		assert_eq!(EngineChoice::Cpu(Backend::Generic).cpu_backend(), Backend::Generic);
+		for &b in Backend::ALL {
+			let want = if b.available() { b } else { Backend::best() };
+			assert_eq!(EngineChoice::Cpu(b).cpu_backend(), want, "{b:?}");
+		}
+		assert_eq!(EngineChoice::prefer_gpu(true), EngineChoice::Gpu);
+		assert_eq!(EngineChoice::prefer_gpu(false), EngineChoice::cpu());
 	}
 }

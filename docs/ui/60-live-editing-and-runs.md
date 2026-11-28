@@ -44,7 +44,7 @@ or every frame) and whether the user paused. The run converges on it, without ti
 - A pause with an edited project adopts the edit at once: the old frames go, the new run waits paused. A
   pause with nothing left to do is no pause: the run reads Completed. A pause holds the fill, not the frame
   looked at: a scrub while paused still shows its frame.
-- Switching the device (Settings, Use the GPU) builds the engine anew at its next work; frames and traces
+- Switching the engine (Settings, Engine) builds it anew at its next work; frames and traces
   stay. Showing the intensity picture makes the run track it, so the frames are made again.
 - A goal change is looked at every 16 steps. Work goes on for the project as it is now alone: an edit leaves
   the frame being made and starts one run of the edited project; a frame for later or the probes' tail is

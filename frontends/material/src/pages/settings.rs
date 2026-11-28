@@ -10,7 +10,7 @@ use egui_mineral_material::prelude::{
 };
 use waveduderust::model::Word;
 use waveduderust::quality::{PreviewDefaults, PreviewTier};
-use waveduderust::unstable::engine::SampleFormat;
+use waveduderust::unstable::engine::{EngineChoice, SampleFormat};
 use waveduderust::unstable::export::h264::Profile;
 use waveduderust_app::Event;
 use waveduderust_app::export::{h264_profiles, profile_key};
@@ -18,7 +18,7 @@ use waveduderust_app::export::{h264_profiles, profile_key};
 use waveduderust_app::live::{WEB_RAM_CACHE_SIZES, detected_web_frame_memory};
 use waveduderust_app::number::NumberSpec;
 use waveduderust_app::platform::machine_facts;
-use waveduderust_app::settings::{Settings as UserSettings, Theme as ThemeSetting, UNDO_STEPS};
+use waveduderust_app::settings::{Engine, Settings as UserSettings, Theme as ThemeSetting, UNDO_STEPS};
 use waveduderust_app::settings_table::{
 	BUILD, DITHERS, FRAME_STEPS, RESOLUTIONS, ROWS, Row, SAMPLES, Section, Setting, ZOOMS, bytes_text, found,
 	shown_rows, shown_sections,
@@ -235,7 +235,14 @@ impl Cx<'_> {
 					ev.push(Event::SetDitherBits(bits));
 				}
 			}
-			Setting::UseGpu => self.switch(ui, st.use_gpu, Event::SetUseGpu, ev),
+			Setting::Engine => {
+				let choices = EngineChoice::available();
+				let words = choices.iter().map(|&c| Engine::of(c).text(self.s())).collect();
+				let at = choices.iter().position(|&c| c == st.engine.choice());
+				if let Some(i) = self.select(ui, words, at, None) {
+					ev.push(Event::SetEngine(choices[i]));
+				}
+			}
 			Setting::AutoRerun => self.switch(ui, st.auto_rerun, Event::SetAutoRerun, ev),
 			Setting::WarnMemory => {
 				self.switch(ui, st.warn_when_ram_insufficient, Event::SetWarnWhenRamInsufficient, ev);

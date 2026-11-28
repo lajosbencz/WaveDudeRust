@@ -5,7 +5,6 @@
 //! from then on. A worker lost, or of another protocol version or build, fails every run until the page is reloaded.
 
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -13,14 +12,15 @@ use waveduderust::run::{
 	Budget, FitFrame, FrameStore, Goal, RamCache, RunError, SpillBackend, SpillFactory, Status, StoreError,
 	StoreLayout, Token, WorkState, storage_full,
 };
-use waveduderust::unstable::engine::Snapshot;
 use waveduderust::unstable::engine::probes::ProbeTrace;
+use waveduderust::unstable::engine::{EngineChoice, Snapshot};
 use waveduderust::unstable::scene::compose::image_key;
 use waveduderust::unstable::sync::lock;
 
 use super::protocol::{Layout, Lost, RunStatus, State, ToPage, ToWorker, Trace, VERSION};
 use super::{Buffer, Port, WorkerGone, decode, post, version_of};
-use crate::live::{Backend, EngineLabel};
+use crate::live::{Backend, EngineLabel, SharedEngine};
+use crate::settings::Engine;
 
 /// (store, generation, frame).
 type FrameKey = (u64, u64, usize);
@@ -113,7 +113,7 @@ enum Worker {
 /// The live run in the browser's run worker, behind a [`Port`].
 pub struct Remote<P: Port> {
 	port: P,
-	use_gpu: Arc<AtomicBool>,
+	choice: SharedEngine,
 	/// The memory the mirror's frames take at Auto, the RAM cache size's share of it or a size in its place.
 	frame_memory: u64,
 	spill: Watching,
@@ -137,15 +137,14 @@ pub struct Remote<P: Port> {
 }
 
 impl<P: Port> Remote<P> {
-	/// A run behind `port` on the GPU while `use_gpu` holds (shared with the settings), its frames in memory by the
+	/// A run behind `port` on the engine `choice` names (shared with the settings), its frames in memory by the
 	/// RAM cache size, `frame_memory` bytes at Auto, and the rest in a spill of `spill`; posts [`ToWorker::Init`].
-	pub fn new(port: P, use_gpu: Arc<AtomicBool>, frame_memory: u64, spill: Box<dyn SpillFactory>) -> Self {
-		let init =
-			ToWorker::Init { version: VERSION, build: crate::build_id(), use_gpu: use_gpu.load(Ordering::Relaxed) };
+	pub fn new(port: P, choice: SharedEngine, frame_memory: u64, spill: Box<dyn SpillFactory>) -> Self {
+		let init = ToWorker::Init { version: VERSION, build: crate::build_id(), engine: Engine::of(choice.get()) };
 		post(&port, &init, None);
 		Self {
 			port,
-			use_gpu,
+			choice,
 			frame_memory,
 			spill: Watching { spill, writes: Watches::default() },
 			worker: Worker::Starting,
@@ -469,7 +468,7 @@ impl<P: Port> Backend for Remote<P> {
 	}
 
 	fn engine_changed(&mut self) {
-		self.send(&ToWorker::Rebuild { use_gpu: self.use_gpu.load(Ordering::Relaxed) }, None);
+		self.send(&ToWorker::Rebuild { engine: Engine::of(self.choice.get()) }, None);
 	}
 
 	fn discard_frames(&mut self) {
@@ -488,7 +487,7 @@ impl<P: Port> Backend for Remote<P> {
 		match &self.worker {
 			Worker::Starting => EngineLabel::Starting,
 			Worker::Ready(gpu) => {
-				let gpu = gpu.as_ref().ok().filter(|_| self.use_gpu.load(Ordering::Relaxed));
+				let gpu = gpu.as_ref().ok().filter(|_| self.choice.get() == EngineChoice::Gpu);
 				EngineLabel::of(gpu.map(String::as_str))
 			}
 			Worker::Gone(..) => EngineLabel::Missing,
@@ -610,7 +609,7 @@ mod tests {
 	fn a_new_mirror_takes_the_whole_budget_and_lets_go_of_the_one_before_first() {
 		let spill = NoSpill::default();
 		let mut remote =
-			Remote::new(Loopback::pair().0, Arc::new(AtomicBool::new(false)), GIB, Box::new(spill.clone()));
+			Remote::new(Loopback::pair().0, SharedEngine::new(EngineChoice::cpu()), GIB, Box::new(spill.clone()));
 		let store = |remote: &Remote<Loopback>| match &remote.mirror {
 			Some(Mirror { store: Ok(store), .. }) => store.clone(),
 			_ => unreachable!("the frames fit"),
@@ -630,8 +629,12 @@ mod tests {
 
 	#[test]
 	fn a_ram_cache_size_replaces_the_frame_memory_and_auto_keeps_it() {
-		let mut remote =
-			Remote::new(Loopback::pair().0, Arc::new(AtomicBool::new(false)), GIB / 8, Box::new(NoSpill::default()));
+		let mut remote = Remote::new(
+			Loopback::pair().0,
+			SharedEngine::new(EngineChoice::cpu()),
+			GIB / 8,
+			Box::new(NoSpill::default()),
+		);
 		let budget = |remote: &mut Remote<Loopback>, ram_cache| {
 			remote.set_goal(Goal { ram_cache, ..Goal::default() });
 			remote.open(1, Layout::from(&layout()));

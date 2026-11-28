@@ -12,7 +12,7 @@ use waveduderust::model::Word;
 use waveduderust::quality::{PreviewDefaults, PreviewTier};
 #[cfg(target_arch = "wasm32")]
 use waveduderust::run::RamCache;
-use waveduderust::unstable::engine::SampleFormat;
+use waveduderust::unstable::engine::{EngineChoice, SampleFormat};
 use waveduderust_app::App;
 use waveduderust_app::Event;
 use waveduderust_app::export::session::ProfileRow;
@@ -21,7 +21,7 @@ use waveduderust_app::live::{WEB_RAM_CACHE_SIZES, detected_web_frame_memory};
 use waveduderust_app::menus::MenuAction;
 use waveduderust_app::number::NumberSpec;
 use waveduderust_app::platform::machine_facts;
-use waveduderust_app::settings::{Settings as UserSettings, Theme as ThemeSetting, UNDO_STEPS};
+use waveduderust_app::settings::{Engine, Settings as UserSettings, Theme as ThemeSetting, UNDO_STEPS};
 use waveduderust_app::settings_table::{
 	BUILD, DITHERS, FRAME_STEPS, RESOLUTIONS, ROWS, SAMPLES, Section, Setting, ZOOMS, bytes_text, found, shown_rows,
 	shown_sections,
@@ -239,7 +239,7 @@ fn control(setting: Setting) -> fn(&mut Ui, &mut Cx<'_>, Name<'_>) {
 		Setting::Frames => frames,
 		Setting::Samples => samples,
 		Setting::Dither => dither,
-		Setting::UseGpu => use_gpu,
+		Setting::Engine => engine,
 		Setting::AutoRerun => auto_rerun,
 		Setting::WarnMemory => warn_memory,
 		Setting::OpenH264 => openh264,
@@ -440,8 +440,15 @@ fn dither(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
 	}
 }
 
-fn use_gpu(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
-	toggle(ui, cx, name, |st| st.use_gpu, Event::SetUseGpu);
+/// The engines this build offers on this machine, the one that runs marked.
+fn engine(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {
+	let (s, now) = (cx.strings(), cx.settings().engine.choice());
+	let choices = EngineChoice::available();
+	let words: Vec<String> = choices.iter().map(|&c| Engine::of(c).text(s)).collect();
+	let at = choices.iter().position(|&c| c == now);
+	if let Some(i) = choose(ui, name.id(), name.text, &words, at, "").filter(|&i| Some(i) != at) {
+		cx.out.push(Event::SetEngine(choices[i]));
+	}
 }
 
 fn auto_rerun(ui: &mut Ui, cx: &mut Cx<'_>, name: Name<'_>) {

@@ -11,20 +11,25 @@ use serde_json::{Map, Value};
 use waveduderust::model::Word;
 use waveduderust::quality::{MachineFacts, PreviewDefaults, PreviewQuality, PreviewTier};
 use waveduderust::run::RamCache;
-use waveduderust::unstable::engine::SampleFormat;
+use waveduderust::unstable::engine::cpu::Backend;
+use waveduderust::unstable::engine::{EngineChoice, SampleFormat};
 use waveduderust::unstable::export::h264::Profile;
 
 use super::history;
 use super::live::{WEB_FRAME_SHARE, WEB_RAM_CACHE_SIZES};
 use super::platform::Store;
-use super::strings::Language;
+use super::strings::{Language, Strings};
 
 /// The settings file's key in the store.
 pub const FILE_NAME: &str = "settings.json";
 /// The settings file's format version, written in every file.
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 /// The RAM cache share of version 1, dropped at load.
 const DROPPED_PERCENT: &str = "FrameMemoryPercent";
+/// The GPU switch of version 2, read at load as an [`Engine`] when the file names none.
+const DROPPED_USE_GPU: &str = "UseGpu";
+/// The key of [`Settings::engine`].
+const ENGINE: &str = "Engine";
 pub const MAX_RECENT: usize = 10;
 pub const MAX_EXPORT_HINTS: usize = 20;
 /// UI zoom bounds from the menu and from `--zoom=`.
@@ -101,6 +106,62 @@ pub enum Theme {
 	Dark,
 }
 
+/// The engine the live runs build, by a name that stays the same on every target: a choice this build or this
+/// machine lacks is kept as read and runs as the best one available ([`Engine::choice`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Engine {
+	/// The GPU engine, the CPU's in its place when there is no GPU.
+	#[default]
+	Gpu,
+	CpuAvx2,
+	CpuGeneric,
+	CpuSimd128,
+}
+
+impl Engine {
+	/// Each CPU setting with its backend's name ([`Backend::name`]) and the string key of the backend's word.
+	const CPU: [(Self, &str, &str); 3] = [
+		(Self::CpuAvx2, "avx2", "EngineBackendAvx2"),
+		(Self::CpuGeneric, "generic", "EngineBackendGeneric"),
+		(Self::CpuSimd128, "simd128", "EngineBackendSimd128"),
+	];
+
+	/// The setting of `choice`.
+	pub fn of(choice: EngineChoice) -> Self {
+		match choice {
+			EngineChoice::Gpu => Self::Gpu,
+			EngineChoice::Cpu(backend) => Self::CPU
+				.iter()
+				.find(|&&(_, name, _)| name == backend.name())
+				.map(|&(engine, ..)| engine)
+				.expect("every CPU backend has a setting"),
+		}
+	}
+
+	/// The choice this names when this build and this machine offer it ([`EngineChoice::available`]); else, for a CPU
+	/// backend, the best CPU backend here, and for the GPU, the best choice here ([`EngineChoice::best`]).
+	pub fn choice(self) -> EngineChoice {
+		match self {
+			Self::Gpu => Some(EngineChoice::Gpu).filter(|c| c.is_available()).unwrap_or_else(EngineChoice::best),
+			cpu => Self::CPU
+				.iter()
+				.find(|&&(engine, ..)| engine == cpu)
+				.and_then(|&(_, name, _)| Backend::named(name))
+				.map(EngineChoice::Cpu)
+				.filter(|c| c.is_available())
+				.unwrap_or(EngineChoice::Cpu(Backend::best())),
+		}
+	}
+
+	/// The engine as the settings list it: "GPU" or "CPU (<backend>)" in the language of `s`.
+	pub fn text(self, s: &Strings) -> String {
+		match Self::CPU.iter().find(|&&(e, ..)| e == self) {
+			Some(&(_, _, key)) => s.format("EngineChoiceCpuFormat", &[&s.get(key)]),
+			None => s.get("EngineChoiceGpu").to_owned(),
+		}
+	}
+}
+
 /// The pictures side by side (Horizontal) or stacked (Vertical).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Orientation {
@@ -143,7 +204,8 @@ pub struct Settings {
 	pub preview_orientation: Orientation,
 	pub auto_rerun: bool,
 	pub warn_when_ram_insufficient: bool,
-	pub use_gpu: bool,
+	/// The engine asked for; [`Engine::choice`] is the one that runs.
+	pub engine: Engine,
 	/// The browser's RAM cache size: 0 is Auto, else one of [`WEB_RAM_CACHE_SIZES`].
 	pub frame_memory_bytes: u64,
 	/// 1, 2 or 4.
@@ -203,7 +265,7 @@ impl Default for Settings {
 			preview_orientation: Orientation::Vertical,
 			auto_rerun: true,
 			warn_when_ram_insufficient: true,
-			use_gpu: true,
+			engine: Engine::Gpu,
 			frame_memory_bytes: 0,
 			preview_resolution: 1,
 			preview_frames: 1,
@@ -304,9 +366,11 @@ impl Settings {
 
 	/// Reads a settings text of a device, the defaults of which fill what it lacks; a file without a version is
 	/// version 0, the format before the field. A value that cannot be read is logged with its key and reads as its
-	/// default; the others are kept, unknown keys among them. A RAM cache share is logged and dropped.
+	/// default; the others are kept, unknown keys among them. A RAM cache share is logged and dropped; a GPU switch
+	/// reads as the engine, the GPU's or the best CPU backend's, unless the file names one ([`migrate_use_gpu`]).
 	pub fn from_json(text: &str, touch_first: bool) -> Result<Self, serde_json::Error> {
 		let mut file: Map<String, Value> = serde_json::from_str(text)?;
+		migrate_use_gpu(&mut file);
 		if let Some(percent) = file.remove(DROPPED_PERCENT).filter(|v| v.as_f64().is_some_and(|p| p > 0.0)) {
 			tracing::warn!(
 				"the RAM cache share of {percent} % ({DROPPED_PERCENT}) is dropped: the frames take the available memory"
@@ -477,6 +541,22 @@ impl Settings {
 	}
 }
 
+/// Replaces version 2's `UseGpu` of `file` by the engine: true is the GPU's, false the best CPU backend here; an
+/// engine named beside it wins, a value that is no bool is logged and dropped.
+fn migrate_use_gpu(file: &mut Map<String, Value>) {
+	let Some(value) = file.remove(DROPPED_USE_GPU) else {
+		return;
+	};
+	match value.as_bool() {
+		Some(_) if file.contains_key(ENGINE) => {}
+		Some(gpu) => {
+			let engine = Engine::of(if gpu { EngineChoice::Gpu } else { EngineChoice::Cpu(Backend::best()) });
+			file.insert(ENGINE.to_owned(), serde_json::to_value(engine).expect("an engine serialises"));
+		}
+		None => tracing::warn!("the setting '{DROPPED_USE_GPU}' cannot be read, the default engine is used: {value}"),
+	}
+}
+
 /// `facts` with a picked RAM cache size (0 is none) in place of the memory, of which the size is the
 /// [`WEB_FRAME_SHARE`]th part.
 fn preset_facts(facts: MachineFacts, picked_bytes: u64) -> MachineFacts {
@@ -510,7 +590,7 @@ mod tests {
 		let v: Value = serde_json::from_str(&Settings::default().to_sparse_json()).unwrap();
 		assert_eq!(v, serde_json::json!({ "Version": VERSION }));
 		let s = Settings {
-			use_gpu: false,
+			engine: Engine::CpuGeneric,
 			ui_zoom: 1.25,
 			h264_profile: Profile::High,
 			undo_steps: 50,
@@ -519,7 +599,7 @@ mod tests {
 		let v: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
 		assert_eq!(v.as_object().unwrap().len(), 5);
 		assert_eq!(v["UndoSteps"], 50);
-		assert_eq!(v["UseGpu"], Value::Bool(false));
+		assert_eq!(v["Engine"], "CpuGeneric", "the engine by its name");
 		assert_eq!(v["H264Profile"], "High", "the profile by its name");
 		assert_eq!(Settings::from_json("{}", false).unwrap().version, 0, "a file before the field");
 		assert_eq!(Settings::from_json(&s.to_sparse_json(), false).unwrap(), s);
@@ -546,10 +626,11 @@ mod tests {
 		let loaded = Settings::load(&store, false, || panic!("not a first start")).settings;
 		assert_eq!(loaded.version, 1);
 		assert!(loaded.unknown.is_empty(), "{:?}", loaded.unknown);
-		assert!(!loaded.use_gpu);
+		let cpu = Engine::of(EngineChoice::Cpu(Backend::best()));
+		assert_eq!(loaded.engine, cpu);
 		loaded.save(&store).unwrap();
 		let written: Value = serde_json::from_str(&store.read(FILE_NAME).unwrap().unwrap()).unwrap();
-		assert_eq!(written, serde_json::json!({ "Version": 2, "UseGpu": false }));
+		assert_eq!(written, serde_json::json!({ "Version": VERSION, "Engine": cpu }));
 		let auto = Settings::from_json(r#"{"Version": 1, "FrameMemoryPercent": 0}"#, false).unwrap();
 		assert!(auto.unknown.is_empty(), "Auto is dropped too");
 	}
@@ -558,7 +639,7 @@ mod tests {
 	fn save_replaces_the_file_whole() {
 		let dir = tempfile::tempdir().unwrap();
 		let store = Store::in_dir(dir.path().join("sub"));
-		let s = Settings { use_gpu: false, ..Settings::default() };
+		let s = Settings { engine: Engine::CpuGeneric, ..Settings::default() };
 		s.save(&store).unwrap();
 		Settings::default().save(&store).unwrap();
 		let names: Vec<_> =
@@ -699,7 +780,7 @@ mod tests {
 	#[test]
 	fn an_unreadable_value_reads_as_its_default_and_keeps_the_others() {
 		for touch_first in [false, true] {
-			let text = r#"{"Version": 2, "UiZoom": 1.5, "Theme": "Neon", "UseGpu": "yes", "UiZoomTypo": 3, "AutoRerun": false}"#;
+			let text = r#"{"Version": 3, "UiZoom": 1.5, "Theme": "Neon", "Engine": "Quantum", "UiZoomTypo": 3, "AutoRerun": false}"#;
 			let s = Settings::from_json(text, touch_first).unwrap();
 			let expected = Settings {
 				ui_zoom: 1.5,
@@ -715,15 +796,76 @@ mod tests {
 	fn unknown_settings_survive_a_save() {
 		let dir = tempfile::tempdir().unwrap();
 		let store = Store::in_dir(dir.path().to_owned());
-		let newer = serde_json::json!({ "Version": 3, "UseGpu": false, "Future": { "Kind": "Mode", "Level": [1, 2] } });
+		let newer = serde_json::json!({
+			"Version": VERSION + 1,
+			"Engine": "CpuGeneric",
+			"Future": { "Kind": "Mode", "Level": [1, 2] }
+		});
 		std::fs::write(dir.path().join(FILE_NAME), newer.to_string()).unwrap();
 		let mut loaded = Settings::load(&store, false, || panic!("not a first start")).settings;
-		assert!(!loaded.use_gpu);
+		assert_eq!(loaded.engine, Engine::CpuGeneric);
 		loaded.auto_rerun = false;
 		loaded.save(&store).unwrap();
 		let written: Value = serde_json::from_str(&store.read(FILE_NAME).unwrap().unwrap()).unwrap();
 		assert_eq!(written["Future"], newer["Future"]);
-		assert_eq!((written["UseGpu"].clone(), written["AutoRerun"].clone()), (Value::Bool(false), Value::Bool(false)));
+		assert_eq!(
+			(written["Engine"].clone(), written["AutoRerun"].clone()),
+			(Value::from("CpuGeneric"), Value::Bool(false))
+		);
+	}
+
+	#[test]
+	fn a_version_2_gpu_switch_reads_as_the_engine_and_is_not_written_back() {
+		let cpu = Engine::of(EngineChoice::Cpu(Backend::best()));
+		let rows = [
+			(r#"{"Version": 2, "UseGpu": true}"#, Engine::Gpu),
+			(r#"{"Version": 2, "UseGpu": false}"#, cpu),
+			(r#"{"Version": 2, "UseGpu": false, "Engine": "Gpu"}"#, Engine::Gpu),
+			(r#"{"Version": 2, "UseGpu": true, "Engine": "CpuGeneric"}"#, Engine::CpuGeneric),
+			(r#"{"Version": 2, "UseGpu": "yes"}"#, Engine::Gpu),
+		];
+		for (text, want) in rows {
+			let s = Settings::from_json(text, false).unwrap();
+			assert_eq!((s.engine, s.unknown.len()), (want, 0), "{text}");
+			let written: Value = serde_json::from_str(&s.to_sparse_json()).unwrap();
+			assert_eq!(written.get(DROPPED_USE_GPU), None, "{text}");
+			assert_eq!(written["Version"], VERSION, "{text}");
+		}
+	}
+
+	#[test]
+	fn each_engine_names_a_choice_and_one_missing_here_runs_as_the_best_of_its_kind() {
+		for engine in [Engine::Gpu, Engine::CpuAvx2, Engine::CpuGeneric, Engine::CpuSimd128] {
+			let choice = engine.choice();
+			assert!(choice.is_available(), "{engine:?}");
+			if Engine::of(choice) != engine {
+				let best =
+					if engine == Engine::Gpu { EngineChoice::best() } else { EngineChoice::Cpu(Backend::best()) };
+				assert_eq!(choice, best, "{engine:?} is missing here");
+			}
+			let read = Settings::from_json(&Settings { engine, ..Settings::default() }.to_sparse_json(), false);
+			assert_eq!(read.unwrap().engine, engine, "{engine:?} is kept as written");
+		}
+		for choice in EngineChoice::available() {
+			assert_eq!(Engine::of(choice).choice(), choice, "{choice:?} round trips");
+		}
+		for &backend in Backend::ALL {
+			assert_ne!(Engine::of(EngineChoice::Cpu(backend)), Engine::Gpu, "{backend:?} has a setting");
+		}
+		assert_eq!(Engine::CpuGeneric.choice(), EngineChoice::Cpu(Backend::Generic));
+		#[cfg(not(target_arch = "x86_64"))]
+		assert_eq!(Engine::CpuAvx2.choice(), EngineChoice::Cpu(Backend::best()), "another machine's backend");
+		#[cfg(not(target_arch = "wasm32"))]
+		assert_eq!(Engine::CpuSimd128.choice(), EngineChoice::Cpu(Backend::best()), "another build's backend");
+	}
+
+	#[test]
+	fn the_engines_read_gpu_and_cpu_with_the_backend() {
+		let s = Strings::new(Language::English);
+		assert_eq!(Engine::Gpu.text(&s), "GPU");
+		assert_eq!(Engine::CpuGeneric.text(&s), "CPU (Generic)");
+		assert_eq!(Engine::CpuAvx2.text(&s), "CPU (AVX2)");
+		assert_eq!(Engine::CpuSimd128.text(&s), "CPU (SIMD128)");
 	}
 
 	#[test]

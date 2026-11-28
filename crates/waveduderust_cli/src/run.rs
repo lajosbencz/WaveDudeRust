@@ -37,7 +37,7 @@ impl EngineArgs {
 	/// The engine for `spec`, reset to its start; an error when its grid does not fit the memory.
 	pub(crate) fn build(self, spec: &RunSpec) -> Result<Box<dyn WaveEngine>> {
 		engine_fits(&spec.scene, &spec.options, Memory::System.read().1)?;
-		Ok(engine::build(spec.scene.clone(), spec.options.clone(), self.gpu).engine)
+		Ok(engine::build(spec.scene.clone(), spec.options.clone(), engine::EngineChoice::prefer_gpu(self.gpu)).engine)
 	}
 
 	fn backend(self) -> Backend {

@@ -60,7 +60,9 @@ impl<F: Fn(Arc<SceneData>, EngineOptions) -> Box<dyn WaveEngine> + MaybeSend> Bu
 #[cfg(not(target_arch = "wasm32"))]
 pub fn engines(backend: crate::Backend) -> EngineFactory {
 	let gpu = backend != crate::Backend::Cpu;
-	Box::new(move |scene, options| crate::engine::build(scene, options, gpu).engine)
+	Box::new(move |scene, options| {
+		crate::engine::build(scene, options, crate::engine::EngineChoice::prefer_gpu(gpu)).engine
+	})
 }
 
 /// The threaded worker's engines, built at once.
@@ -334,7 +336,11 @@ impl RunWorker {
 	/// A worker on the CPU engine.
 	#[cfg(not(target_arch = "wasm32"))]
 	pub fn cpu(cache_dir: std::path::PathBuf) -> std::io::Result<Self> {
-		Self::new(Box::new(|scene, options| crate::engine::cpu_engine(scene, options)), cache_dir, Arc::default())
+		Self::new(
+			Box::new(|scene, options| crate::engine::cpu_engine(scene, options, crate::engine::cpu_backend())),
+			cache_dir,
+			Arc::default(),
+		)
 	}
 
 	/// A worker that works in [`pump`](Self::pump) alone, whose engines `factory` starts (a pump yields while one is

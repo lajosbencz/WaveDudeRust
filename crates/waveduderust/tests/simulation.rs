@@ -49,7 +49,8 @@ fn field_and_traces_match_a_hand_driven_engine() {
 	let p = project();
 	let spec = RunSpec::create(&p, None, PreviewQuality::FULL, Brightness::default(), true).unwrap();
 	// The engine `Backend::Cpu` builds: the CPU engine this build and this CPU default to.
-	let mut e: Box<dyn WaveEngine> = engine::build(spec.scene.clone(), spec.options.clone(), false).engine;
+	let mut e: Box<dyn WaveEngine> =
+		engine::build(spec.scene.clone(), spec.options.clone(), engine::EngineChoice::cpu()).engine;
 	let mut collector = ProbeCollector::new(&spec.probes, &spec.scene, spec.seed);
 	e.set_emitters(&spec.emitters);
 	e.set_probes(collector.cells());

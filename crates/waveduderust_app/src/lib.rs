@@ -50,21 +50,20 @@ pub mod wake;
 pub mod window;
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use waveduderust::io::schemes::SchemeStore;
 use waveduderust::model::{ItemRef, Point, SchemeId};
 use waveduderust::quality::{MachineFacts, PreviewQuality};
 use waveduderust::run::{Levers, RamCache};
+use waveduderust::unstable::engine::EngineChoice;
 
 use clipboard::{Copyable, PasteTarget};
 use commands::{Change, ChangeKind, Command, CommandError};
 use document::{Document, DocumentError, Opened, Source, Target};
-use live::{Backend, CoreBackend, LiveController, LiveSettings};
+use live::{Backend, CoreBackend, LiveController, LiveSettings, SharedEngine};
 use platform::{Instant, Store};
 use selection::{Row, Selection};
-use settings::{ExportHint, Settings, Theme};
+use settings::{Engine, ExportHint, Settings, Theme};
 use strings::{Language, Strings};
 
 /// This build: the version and, after a `+`, the build `tools/build-web.sh` names in `WAVEDUDE_BUILD` (its commit),
@@ -161,7 +160,8 @@ pub enum Event {
 	SetPreviewQuality(PreviewQuality),
 	SetDitherBits(u32),
 	SetAutoRerun(bool),
-	SetUseGpu(bool),
+	/// The engine of the live runs, one of `EngineChoice::available`.
+	SetEngine(EngineChoice),
 	SetRamCache(RamCache),
 	SetWarnWhenRamInsufficient(bool),
 	SetTitleFullPath(bool),
@@ -269,7 +269,7 @@ pub struct AppState<B: Backend> {
 	reveals: u64,
 	/// Bumped when another document replaces the open one (New, Open, Close); a save keeps it.
 	documents: u64,
-	use_gpu: Arc<AtomicBool>,
+	engine: SharedEngine,
 	pending: Option<Guarded>,
 	/// The export hint of a project without a file: this session's alone.
 	session_hint: ExportHint,
@@ -306,9 +306,9 @@ impl AppState<CoreBackend> {
 		let touch_first = platform::touch_first();
 		let loaded =
 			load_settings(&store, touch_first, || Some(waveduderust::unstable::engine::gpu::context().is_ok()), args);
-		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
-		let backend = CoreBackend::new(use_gpu.clone(), dirs.cache.join("frames"), memory)?;
-		let mut state = Self::started(loaded, store, backend, use_gpu);
+		let engine = SharedEngine::new(loaded.settings.engine.choice());
+		let backend = CoreBackend::new(engine.clone(), dirs.cache.join("frames"), memory)?;
+		let mut state = Self::started(loaded, store, backend, engine);
 		state.codec_dir = Some(dirs.codec());
 		Ok(state)
 	}
@@ -320,13 +320,13 @@ impl AppState<CoreBackend> {
 	pub fn start<'a>(store: Store, args: impl IntoIterator<Item = &'a str>) -> Self {
 		let touch_first = platform::touch_first();
 		let loaded = load_settings(&store, touch_first, || None, args);
-		let use_gpu = Arc::new(AtomicBool::new(loaded.settings.use_gpu));
-		let backend = CoreBackend::new(use_gpu.clone());
-		Self::started(loaded, store, backend, use_gpu)
+		let engine = SharedEngine::new(loaded.settings.engine.choice());
+		let backend = CoreBackend::new(engine.clone());
+		Self::started(loaded, store, backend, engine)
 	}
 
-	fn started(loaded: settings::Loaded, store: Store, backend: CoreBackend, use_gpu: Arc<AtomicBool>) -> Self {
-		let mut state = Self::with_backend(loaded.settings, Some(store.clone()), backend, use_gpu);
+	fn started(loaded: settings::Loaded, store: Store, backend: CoreBackend, engine: SharedEngine) -> Self {
+		let mut state = Self::with_backend(loaded.settings, Some(store.clone()), backend, engine);
 		state.schemes = user_schemes::load(&store);
 		state.first_start = loaded.first_start;
 		state
@@ -350,13 +350,9 @@ fn load_settings<'a>(
 }
 
 impl<B: Backend> AppState<B> {
-	/// The state on `backend`; `settings_store` is where setting changes are saved (`None`: not saved).
-	pub fn with_backend(
-		settings: Settings,
-		settings_store: Option<Store>,
-		backend: B,
-		use_gpu: Arc<AtomicBool>,
-	) -> Self {
+	/// The state on `backend`, which builds the engine `engine` names; `settings_store` is where setting changes are
+	/// saved (`None`: not saved).
+	pub fn with_backend(settings: Settings, settings_store: Option<Store>, backend: B, engine: SharedEngine) -> Self {
 		let strings = Strings::new(Language::resolve(&settings.language));
 		let mut document = Document::empty();
 		document.history.set_limit(settings.undo_steps as usize);
@@ -376,7 +372,7 @@ impl<B: Backend> AppState<B> {
 			observed: None,
 			reveals: 0,
 			documents: 0,
-			use_gpu,
+			engine,
 			pending: None,
 			session_hint: ExportHint::default(),
 		};
@@ -498,7 +494,7 @@ impl<B: Backend> AppState<B> {
 	}
 
 	fn settings_changed(&mut self, preview_changed: bool, now: Instant) {
-		self.use_gpu.store(self.settings.use_gpu, Ordering::Relaxed);
+		self.engine.set(self.settings.engine.choice());
 		self.live.set_settings(live_settings(&self.settings));
 		if preview_changed {
 			let (project, view) = (&self.document.project, &self.document.view);
@@ -855,9 +851,9 @@ impl<B: Backend> AppState<B> {
 				self.settings_changed(false, now);
 				Response::None
 			}
-			Event::SetUseGpu(on) => {
-				let changed = self.settings.use_gpu != on;
-				self.settings.use_gpu = on;
+			Event::SetEngine(choice) => {
+				let changed = self.settings.engine.choice() != choice;
+				self.settings.engine = Engine::of(choice);
 				self.settings_changed(false, now);
 				if changed {
 					self.live.backend_mut().engine_changed();

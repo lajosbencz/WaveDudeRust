@@ -102,7 +102,11 @@ impl SimulationBuilder {
 			Brightness::default(),
 			self.track_intensity,
 		)?;
-		let built = engine::build(spec.scene.clone(), spec.options.clone(), self.backend != Backend::Cpu);
+		let built = engine::build(
+			spec.scene.clone(),
+			spec.options.clone(),
+			engine::EngineChoice::prefer_gpu(self.backend != Backend::Cpu),
+		);
 		if let (Backend::Gpu, Some(why)) = (self.backend, built.fallback.clone()) {
 			return Err(SimulationError::NoGpu(why));
 		}
